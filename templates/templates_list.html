@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Templat &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Templat Lembar Jawaban</h1>
+    <p class="lead">Citra acuan dan koordinat bulatan jawaban.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('sample_sheet') }}" class="btn btn-outline-primary"><i class="bi bi-download me-1"></i>Lembar Contoh</a>
+    <a href="{{ url_for('template_new') }}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Buat Templat</a>
+  </div>
+</div>
+
+{% if templates %}
+<div class="row g-3">
+  {% for t in templates %}
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100">
+      <img src="{{ t.ref_path|media_url }}" class="template-thumb" alt="Pratinjau {{ t.name }}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <h5 class="card-title mb-1">{{ t.name }}</h5>
+          <span class="badge text-bg-light">{{ t.n_questions }} soal</span>
+        </div>
+        <p class="text-muted-sm mb-3">{{ t.n_options }} opsi &middot; {{ t.n_blocks }} blok &middot; {{ t.bubbles|length }} bulatan</p>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="{{ url_for('template_detail', template_id=t.id) }}" class="btn btn-sm btn-outline-primary">Detail</a>
+          <a href="{{ url_for('key_list_for_template', template_id=t.id) }}" class="btn btn-sm btn-outline-secondary" title="Kelola paket kunci jawaban"><i class="bi bi-key me-1"></i>{{ t.keys|length }} paket</a>
+          <a href="{{ url_for('scan_page', template_id=t.id) }}" class="btn btn-sm btn-outline-success">Scan</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-grid-3x3-gap display-4 text-muted d-block mb-3"></i>
+    <h5>Belum ada templat</h5>
+    <p class="text-muted">Download lembar contoh, cetak, foto, lalu unggah sebagai templat kosong.</p>
+    <div class="d-flex justify-content-center gap-2 flex-wrap">
+      <a href="{{ url_for('sample_sheet') }}" class="btn btn-outline-primary">Download Lembar Contoh</a>
+      <a href="{{ url_for('template_new') }}" class="btn btn-primary">Buat Templat</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

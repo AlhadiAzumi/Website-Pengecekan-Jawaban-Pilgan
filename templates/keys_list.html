@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Paket Kunci Jawaban &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Paket Kunci Jawaban</h1>
+    <p class="lead">Satu paket kunci = satu daftar jawaban benar untuk satu versi soal pada satu templat.</p>
+  </div>
+  <a href="{{ url_for('templates_list') }}" class="btn btn-primary"><i class="bi bi-grid-3x3-gap me-1"></i>Pilih Templat</a>
+</div>
+
+<div class="alert alert-info d-flex gap-2 align-items-start">
+  <i class="bi bi-info-circle-fill mt-1"></i>
+  <div>
+    <strong>Apa itu paket kunci?</strong>
+    Jika satu templat dipakai untuk beberapa versi soal (misalnya UTS Paket A dan Paket B), buat satu paket kunci untuk setiap versi.
+    Saat scan, pilih paket kunci yang sesuai dengan lembar jawaban siswa.
+  </div>
+</div>
+
+{% if keys %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-key me-1"></i>Semua Paket</span>
+    <span class="badge text-bg-light">{{ keys|length }} paket</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" data-sortable>
+      <thead>
+        <tr>
+          <th class="ps-3" data-sort="0">Paket</th>
+          <th data-sort="1">Templat</th>
+          <th class="text-center" data-sort="2">Terisi</th>
+          <th>Pratinjau Kunci</th>
+          <th data-sort="4">Dibuat</th>
+          <th class="text-end pe-3">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in keys %}
+        <tr>
+          <td class="ps-3">
+            <span class="fw-semibold">{{ k.package_name }}</span>
+          </td>
+          <td>
+            <a href="{{ url_for('template_detail', template_id=k.template_id) }}" class="text-decoration-none">{{ k.template.name }}</a>
+            <div class="text-muted-sm">{{ k.template.n_questions }} soal &middot; opsi {{ k.template.option_labels|join(', ') }}</div>
+          </td>
+          <td class="text-center">
+            <span class="badge text-bg-{{ 'success' if k.items|length == k.template.n_questions else 'warning' }}">
+              {{ k.items|length }} / {{ k.template.n_questions }}
+            </span>
+          </td>
+          <td><code class="text-muted">{{ k.answer_string[:32] }}{% if k.answer_string|length > 32 %}...{% endif %}</code></td>
+          <td class="text-muted-sm">{{ k.created_at|datetime_id }}</td>
+          <td class="text-end pe-3">
+            <div class="d-inline-flex gap-1">
+              <a href="{{ url_for('key_edit', key_id=k.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil-square me-1"></i>Buka</a>
+              <a href="{{ url_for('scan_page', template_id=k.template_id, key_id=k.id) }}" class="btn btn-sm btn-outline-success"><i class="bi bi-camera me-1"></i>Scan</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-key display-4 text-muted d-block mb-3"></i>
+    <h5>Belum ada paket kunci jawaban</h5>
+    <p class="text-muted mb-3">Pilih templat terlebih dahulu, lalu isi kunci lewat form atau unggah file Excel.</p>
+    <a href="{{ url_for('templates_list') }}" class="btn btn-primary">Ke Daftar Templat</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

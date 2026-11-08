@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Pengaturan &amp; Debug &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Pengaturan &amp; Debug</h1>
+    <p class="lead">Atur parameter default pengolahan citra dan pelajari tahapan yang dipakai sistem.</p>
+  </div>
+  <a href="{{ url_for('scan_page') }}" class="btn btn-primary"><i class="bi bi-camera me-1"></i>Scan Lembar</a>
+</div>
+
+<form method="post" action="{{ url_for('settings_page') }}">
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-sliders me-1"></i>Thresholding &amp; Morfologi</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="thresholdMethod">Metode threshold</label>
+            <select class="form-select" id="thresholdMethod" name="threshold_method">
+              <option value="otsu" {{ 'selected' if settings.threshold_method == 'otsu' }}>Otsu (global, cepat)</option>
+              <option value="adaptive" {{ 'selected' if settings.threshold_method == 'adaptive' }}>Adaptive Gaussian (cahaya tidak rata)</option>
+            </select>
+            <div class="form-text">Adaptive lebih tahan bayangan, Otsu lebih cepat untuk scan bersih.</div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Adaptive block size</label>
+              <span class="slider-value" id="blockValue">{{ settings.adaptive_block_size }}</span>
+            </div>
+            <input class="form-range" type="range" name="adaptive_block_size" min="3" max="151" step="2"
+                   value="{{ settings.adaptive_block_size }}" data-output="#blockValue" data-decimals="0">
+            <div class="form-text">Ukuran lingkungan lokal (harus ganjil).</div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Adaptive C</label>
+              <span class="slider-value" id="cValue">{{ settings.adaptive_c }}</span>
+            </div>
+            <input class="form-range" type="range" name="adaptive_c" min="-20" max="50" step="1"
+                   value="{{ settings.adaptive_c }}" data-output="#cValue" data-decimals="0">
+            <div class="form-text">Nilai dikurangkan dari rata-rata lokal. Naikkan untuk mengurangi noise.</div>
+          </div>
+          <div class="mb-0">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Kernel morfologi</label>
+              <span class="slider-value" id="kernelValue">{{ settings.morph_kernel }}</span>
+            </div>
+            <input class="form-range" type="range" name="morph_kernel" min="1" max="15" step="2"
+                   value="{{ settings.morph_kernel }}" data-output="#kernelValue" data-decimals="0">
+            <div class="form-text">Opening + closing untuk membuang bintik dan menutup celah arsiran.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-bullseye me-1"></i>Deteksi Bulatan &amp; Pembacaan</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Threshold manual</label>
+              <span class="slider-value" id="detectValue">{{ settings.detect_threshold }}</span>
+            </div>
+            <input class="form-range" type="range" name="detect_threshold" min="0" max="255" step="1"
+                   value="{{ settings.detect_threshold }}" data-output="#detectValue" data-decimals="0">
+            <div class="form-text">0 = Otsu otomatis untuk pencarian kandidat bulatan.</div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Luas minimum (px)</label>
+              <input class="form-control" type="number" name="min_area" min="8" max="100000" value="{{ settings.min_area }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Luas maksimum (px)</label>
+              <input class="form-control" type="number" name="max_area" min="50" max="500000" value="{{ settings.max_area }}">
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Circularity minimum</label>
+              <span class="slider-value" id="circValue">{{ "%.2f"|format(settings.circularity) }}</span>
+            </div>
+            <input class="form-range" type="range" name="circularity" min="0.30" max="0.95" step="0.01"
+                   value="{{ settings.circularity }}" data-output="#circValue" data-decimals="2">
+            <div class="form-text">Turunkan bila bulatan tidak terdeteksi karena cetakan tidak sempurna.</div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Ambang isi jawaban</label>
+              <span class="slider-value" id="fillValue">{{ "%.2f"|format(settings.fill_ratio) }}</span>
+            </div>
+            <input class="form-range" type="range" name="fill_ratio" min="0.05" max="0.95" step="0.01"
+                   value="{{ settings.fill_ratio }}" data-output="#fillValue" data-decimals="2">
+            <div class="form-text">Rasio piksel minimum agar sebuah opsi dianggap terisi.</div>
+          </div>
+          <div class="mb-0">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Ambang ketajaman foto</label>
+              <span class="slider-value" id="blurValue">{{ "%.0f"|format(settings.blur_threshold) }}</span>
+            </div>
+            <input class="form-range" type="range" name="blur_threshold" min="0" max="300" step="5"
+                   value="{{ settings.blur_threshold }}" data-output="#blurValue" data-decimals="0">
+            <div class="form-text">Di bawah nilai ini foto dianggap buram dan diberi peringatan.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    <button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i>Simpan Pengaturan</button>
+    <button class="btn btn-outline-secondary" type="reset"><i class="bi bi-arrow-counterclockwise me-1"></i>Kembalikan Nilai Form</button>
+    <span class="text-muted-sm align-self-center">Pengaturan ini menjadi nilai awal saat membuat templat dan scan.</span>
+  </div>
+</form>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>Tahapan Pengolahan Citra</div>
+      <div class="card-body">
+        <ol class="mb-0 ps-3">
+          <li class="mb-2"><strong>Grayscale</strong> &mdash; citra diubah menjadi satu kanal intensitas.</li>
+          <li class="mb-2"><strong>Gaussian Blur</strong> &mdash; meredam noise sebelum deteksi tepi.</li>
+          <li class="mb-2"><strong>Canny / Kontur / Marker</strong> &mdash; menemukan tepi kertas dan menyejajarkan perspektif lembar.</li>
+          <li class="mb-2"><strong>Thresholding</strong> &mdash; memisahkan tinta jawaban dari kertas (Otsu atau adaptive).</li>
+          <li class="mb-2"><strong>Morfologi</strong> &mdash; opening dan closing membersihkan noise serta menutup celah arsiran.</li>
+          <li class="mb-2"><strong>Analisis area piksel</strong> &mdash; rasio piksel putih di dalam setiap bulatan dihitung.</li>
+          <li><strong>Penilaian</strong> &mdash; opsi dengan rasio di atas ambang dibandingkan dengan kunci jawaban.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-database me-1"></i>Statistik Data</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-7 text-muted">Templat</dt><dd class="col-5 text-end fw-bold">{{ stats.templates }}</dd>
+          <dt class="col-7 text-muted">Paket kunci</dt><dd class="col-5 text-end fw-bold">{{ stats["keys"] }}</dd>
+          <dt class="col-7 text-muted">Lembar diperiksa</dt><dd class="col-5 text-end fw-bold">{{ stats.scans }}</dd>
+        </dl>
+        <hr>
+        <p class="text-muted-sm mb-0">
+          Halaman detail hasil menampilkan seluruh tahapan citra per lembar sehingga proses
+          thresholding dan analisis area piksel dapat diperiksa satu per satu.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

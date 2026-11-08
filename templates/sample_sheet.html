@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Lembar Contoh &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Generator Lembar Jawaban</h1>
+    <p class="lead">Buat lembar kosong A4 dengan marker sudut untuk diuji coba.</p>
+  </div>
+  <a href="{{ url_for('template_new') }}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Buat Templat</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-file-earmark-plus me-1"></i>Parameter Lembar</div>
+      <div class="card-body">
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Judul lembar</label>
+            <input class="form-control" type="text" name="title" value="{{ form.title }}">
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Jumlah soal</label>
+              <input class="form-control" type="number" name="n_questions" min="1" max="120" value="{{ form.n_questions }}" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Opsi per soal</label>
+              <select class="form-select" name="n_options">
+                {% for n in [2,3,4,5] %}
+                <option value="{{ n }}" {{ 'selected' if form.n_options == n }}>A - {{ 'ABCDE'[n-1] }}</option>
+                {% endfor %}
+                {% for n in [6,7,8,9,10] %}
+                <option value="{{ n }}" {{ 'selected' if form.n_options == n }}>{{ n }} opsi</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Blok / kolom</label>
+              <select class="form-select" name="n_blocks">
+                <option value="0" {{ 'selected' if form.n_blocks == 0 }}>Otomatis (maks. 25 baris per blok)</option>
+                {% for n in [1,2,3,4] %}
+                <option value="{{ n }}" {{ 'selected' if form.n_blocks == n }}>{{ n }} blok</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Jumlah soal harus habis dibagi jumlah blok.</div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-magic me-1"></i>Buat Lembar</button>
+        </form>
+        <div class="alert alert-light border mt-3 mb-0 small">
+          <i class="bi bi-printer me-1"></i>
+          Cetak PNG/PDF dengan skala <strong>100% / Actual Size</strong> (jangan Fit to Page) agar ukuran bulatan dan marker akurat.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-eye me-1"></i>Pratinjau</span>
+        {% if generated %}
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-success" href="{{ generated.png|media_url }}" download><i class="bi bi-download me-1"></i>PNG</a>
+          <a class="btn btn-sm btn-danger" href="{{ generated.pdf|media_url }}" download><i class="bi bi-file-pdf me-1"></i>PDF</a>
+        </div>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if generated %}
+        <div class="image-frame">
+          <img src="{{ generated.png|media_url }}" alt="Pratinjau lembar jawaban" data-zoomable>
+        </div>
+        <div class="text-muted-sm mt-2">
+          PNG: {{ (generated.png_size / 1024)|round(0)|int }} KB &middot;
+          PDF: {{ (generated.pdf_size / 1024)|round(0)|int }} KB &middot;
+          {{ form.n_questions }} soal &times; {{ form.n_options }} opsi
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-file-earmark-image display-4 d-block mb-3"></i>
+          <p class="mb-0">Atur parameter lalu klik <strong>Buat Lembar</strong>.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

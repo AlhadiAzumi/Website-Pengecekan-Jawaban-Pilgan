@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Scan Lembar &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Scan &amp; Periksa</h1>
+    <p class="lead">Unggah foto lembar jawaban, sistem akan menyelaraskan, melakukan thresholding, lalu menghitung area piksel tiap gelembung.</p>
+  </div>
+  <a href="{{ url_for('results_list') }}" class="btn btn-outline-secondary"><i class="bi bi-table me-1"></i>Hasil Pemeriksaan</a>
+</div>
+
+{% if not templates %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-inbox display-5 text-muted d-block mb-3"></i>
+    <h5>Belum ada templat</h5>
+    <p class="text-muted">Buat templat lembar jawaban terlebih dahulu sebelum melakukan scan.</p>
+    <a href="{{ url_for('template_new') }}" class="btn btn-primary">Buat Templat</a>
+  </div>
+</div>
+{% else %}
+<form method="post" enctype="multipart/form-data" id="scanForm">
+  <div class="card mb-3">
+    <div class="card-header"><i class="bi bi-sliders me-1"></i>Templat &amp; Kunci</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="templateSelect">Templat lembar</label>
+          <select class="form-select" id="templateSelect" name="template_id" required>
+            <option value="">-- Pilih templat --</option>
+            {% for t in templates %}
+            <option value="{{ t.id }}" {{ 'selected' if selected_template and selected_template.id == t.id }}>{{ t.name }} ({{ t.n_questions }} soal)</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="keySelect">Paket kunci jawaban</label>
+          <select class="form-select" id="keySelect" name="key_id" required>
+            <option value="">-- Pilih kunci --</option>
+            {% for key in keys %}
+            <option value="{{ key.id }}" {{ 'selected' if selected_key_id == key.id }}>{{ key.package_name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text" id="keyHint">Satu paket kunci mewakili satu versi soal. Pilih yang sesuai dengan lembar siswa.</div>
+        </div>
+      </div>
+      {% if selected_template and not keys %}
+      <div class="alert alert-warning mt-3 mb-0">
+        Templat ini belum memiliki kunci jawaban.
+        <a href="{{ url_for('key_list_for_template', template_id=selected_template.id) }}" class="alert-link">Buat kunci terlebih dahulu</a>.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-7">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-images me-1"></i>Foto Lembar Jawaban</span>
+          <span class="badge text-bg-light" id="fileCountBadge">0 file</span>
+        </div>
+        <div class="card-body">
+          <div class="scan-drop mb-3" id="dropZone">
+            <i class="bi bi-cloud-arrow-up display-5 text-primary d-block mb-2"></i>
+            <p class="mb-1 fw-semibold">Tarik beberapa foto ke sini atau pilih file</p>
+            <p class="text-muted small mb-3">PNG, JPG, JPEG, WEBP, BMP &middot; bisa lebih dari satu lembar sekaligus</p>
+            <div class="d-flex justify-content-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-primary" id="browseBtn"><i class="bi bi-folder2-open me-1"></i>Pilih File</button>
+              <button type="button" class="btn btn-outline-primary" id="cameraBtn"><i class="bi bi-camera me-1"></i>Ambil Foto</button>
+            </div>
+          </div>
+          <input class="d-none" type="file" id="scanFiles" name="photos" accept="image/*" multiple>
+          <input class="d-none" type="file" id="cameraCapture" accept="image/*" capture="environment">
+          <div id="fileList" class="d-grid gap-2"></div>
+          <div class="form-text mt-2">Nama siswa bisa diubah sebelum submit. NIM/kelas bersifat opsional.</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-gear me-1"></i>Parameter Pemeriksaan</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="alignmentMode">Penyelarasan citra</label>
+            <select class="form-select" id="alignmentMode" name="alignment_mode">
+              <option value="auto">Otomatis (marker &rarr; kertas &rarr; ORB)</option>
+              <option value="marker">Marker sudut saja</option>
+              <option value="paper">Sudut kertas saja</option>
+              <option value="orb">ORB feature matching</option>
+              <option value="resize">Skala langsung (foto hasil scan)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="fillRatio">Ambang area piksel (fill ratio)</label>
+            <div class="d-flex align-items-center gap-3">
+              <input type="range" class="form-range flex-grow-1" id="fillRatio" name="fill_ratio" min="0.05" max="0.95" step="0.01" value="0.40">
+              <output class="badge text-bg-primary" id="fillRatioOut">0.40</output>
+            </div>
+            <div class="form-text">Gunakan 0.25&ndash;0.35 untuk jawaban dilingkari tipis, 0.40&ndash;0.50 untuk dihitamkan penuh.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="thresholdMethod">Metode thresholding</label>
+            <select class="form-select" id="thresholdMethod" name="threshold_method">
+              <option value="otsu">Otsu (global)</option>
+              <option value="adaptive">Adaptive (cahaya tidak rata)</option>
+            </select>
+          </div>
+          <div class="row g-2 mb-3" id="adaptiveFields">
+            <div class="col-6">
+              <label class="form-label small fw-semibold" for="adaptiveBlock">Block size</label>
+              <input type="number" class="form-control" id="adaptiveBlock" name="adaptive_block_size" value="31" min="3" max="151" step="2">
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold" for="adaptiveC">Konstanta C</label>
+              <input type="number" class="form-control" id="adaptiveC" name="adaptive_c" value="15" min="-20" max="50">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="morphKernel">Kernel morfologi</label>
+            <select class="form-select" id="morphKernel" name="morph_kernel">
+              <option value="1">1 &times; 1 (tanpa morfologi)</option>
+              <option value="3" selected>3 &times; 3</option>
+              <option value="5">5 &times; 5</option>
+              <option value="7">7 &times; 7</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label fw-semibold" for="className">Kelas (opsional, berlaku untuk batch)</label>
+            <input class="form-control" type="text" id="className" name="class_name" placeholder="Contoh: XI IPA 2">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="text-muted small"><i class="bi bi-shield-check me-1"></i>Foto disimpan lokal di folder <code>uploads/scans</code>.</div>
+    <button type="submit" class="btn btn-success btn-lg" id="submitScan"><i class="bi bi-play-fill me-1"></i>Mulai Periksa</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const templatesData = {{ templates_json|tojson }};
+  const templateSelect = document.getElementById("templateSelect");
+  const keySelect = document.getElementById("keySelect");
+  const keyHint = document.getElementById("keyHint");
+
+  function refreshKeys() {
+    if (!templateSelect || !keySelect) return;
+    const id = templateSelect.value;
+    const previous = keySelect.value;
+    keySelect.innerHTML = "";
+    const info = templatesData[id];
+    if (!info || !info.keys.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = info ? "-- Templat belum punya kunci --" : "-- Pilih kunci --";
+      keySelect.appendChild(opt);
+      keyHint.textContent = info ? "Templat ini belum punya paket kunci. Buat dulu di menu Kunci." : "Satu paket kunci mewakili satu versi soal. Pilih yang sesuai dengan lembar siswa.";
+      return;
+    }
+    info.keys.forEach(function (key) {
+      const opt = document.createElement("option");
+      opt.value = key.id;
+      opt.textContent = key.package_name;
+      keySelect.appendChild(opt);
+    });
+    if ([...keySelect.options].some(function (o) { return o.value === previous; })) {
+      keySelect.value = previous;
+    }
+    keyHint.textContent = info.keys.length + " paket kunci tersedia. Pilih paket yang sesuai dengan versi soal lembar siswa.";
+  }
+
+  if (templateSelect) {
+    templateSelect.addEventListener("change", function () {
+      keySelect.value = "";
+      refreshKeys();
+    });
+    refreshKeys();
+  }
+
+  const mainInput = document.getElementById("scanFiles");
+  const cameraInput = document.getElementById("cameraCapture");
+  const browseBtn = document.getElementById("browseBtn");
+  const cameraBtn = document.getElementById("cameraBtn");
+  const dropZone = document.getElementById("dropZone");
+  const fileList = document.getElementById("fileList");
+  const fileCountBadge = document.getElementById("fileCountBadge");
+  const form = document.getElementById("scanForm");
+  let selectedFiles = [];
+
+  function humanSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function baseName(name) {
+    return name.replace(/\.[^.]+$/, "");
+  }
+
+  function renderFiles() {
+    fileList.innerHTML = "";
+    selectedFiles.forEach(function (file, index) {
+      const row = document.createElement("div");
+      row.className = "file-row";
+      const info = document.createElement("div");
+      info.className = "file-info";
+      const title = document.createElement("div");
+      title.className = "fw-semibold text-truncate";
+      title.textContent = file.name;
+      const meta = document.createElement("div");
+      meta.className = "small text-muted";
+      meta.textContent = humanSize(file.size);
+      info.appendChild(title);
+      info.appendChild(meta);
+
+      const nameWrap = document.createElement("div");
+      nameWrap.className = "file-fields";
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "form-control form-control-sm";
+      nameInput.name = "student_names";
+      nameInput.placeholder = "Nama siswa";
+      nameInput.value = baseName(file.name);
+      const noInput = document.createElement("input");
+      noInput.type = "text";
+      noInput.className = "form-control form-control-sm";
+      noInput.name = "student_nos";
+      noInput.placeholder = "NIM (opsional)";
+      nameWrap.appendChild(nameInput);
+      nameWrap.appendChild(noInput);
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-sm btn-outline-danger";
+      remove.innerHTML = '<i class="bi bi-x-lg"></i>';
+      remove.title = "Hapus dari daftar";
+      remove.addEventListener("click", function () {
+        selectedFiles.splice(index, 1);
+        renderFiles();
+      });
+
+      row.appendChild(info);
+      row.appendChild(nameWrap);
+      row.appendChild(remove);
+      fileList.appendChild(row);
+    });
+    fileCountBadge.textContent = selectedFiles.length + " file";
+  }
+
+  function addFiles(list) {
+    Array.from(list).forEach(function (file) {
+      if (file && file.type.startsWith("image/")) {
+        selectedFiles.push(file);
+      }
+    });
+    renderFiles();
+  }
+
+  if (mainInput) {
+    browseBtn.addEventListener("click", function () { mainInput.click(); });
+    cameraBtn.addEventListener("click", function () { cameraInput.click(); });
+    mainInput.addEventListener("change", function () {
+      addFiles(mainInput.files);
+      mainInput.value = "";
+    });
+    cameraInput.addEventListener("change", function () {
+      addFiles(cameraInput.files);
+      cameraInput.value = "";
+    });
+    ["dragenter", "dragover"].forEach(function (eventName) {
+      dropZone.addEventListener(eventName, function (e) {
+        e.preventDefault();
+        dropZone.classList.add("dragging");
+      });
+    });
+    ["dragleave", "drop"].forEach(function (eventName) {
+      dropZone.addEventListener(eventName, function (e) {
+        e.preventDefault();
+        dropZone.classList.remove("dragging");
+      });
+    });
+    dropZone.addEventListener("drop", function (e) {
+      addFiles(e.dataTransfer.files);
+    });
+  }
+
+  if (form) {
+    form.addEventListener("submit", function (e) {
+      if (selectedFiles.length) {
+        const transfer = new DataTransfer();
+        selectedFiles.forEach(function (file) { transfer.items.add(file); });
+        mainInput.files = transfer.files;
+      } else if (!mainInput.files.length) {
+        e.preventDefault();
+        fileCountBadge.textContent = "0 file";
+        alert("Pilih minimal satu foto lembar jawaban.");
+        return;
+      }
+      const submit = document.getElementById("submitScan");
+      submit.disabled = true;
+      submit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memeriksa...';
+    });
+  }
+
+  const fillRatio = document.getElementById("fillRatio");
+  const fillRatioOut = document.getElementById("fillRatioOut");
+  if (fillRatio) {
+    const sync = function () { fillRatioOut.textContent = Number(fillRatio.value).toFixed(2); };
+    fillRatio.addEventListener("input", sync);
+    sync();
+  }
+})();
+</script>
+{% endblock %}

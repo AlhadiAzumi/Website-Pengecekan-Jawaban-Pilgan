@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if key else 'Buat' }} Paket Kunci &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ 'Edit Paket Kunci Jawaban' if key else 'Isi Paket Kunci Jawaban' }}</h1>
+    <p class="lead">{{ template.name }} &middot; {{ template.n_questions }} soal &middot; opsi {{ template.option_labels|join(', ') }}</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('key_list_for_template', template_id=template.id) }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Daftar Paket</a>
+    {% if key %}
+    <a href="{{ url_for('scan_page', template_id=template.id, key_id=key.id) }}" class="btn btn-success"><i class="bi bi-camera me-1"></i>Scan</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="alert alert-info d-flex gap-2 align-items-start">
+  <i class="bi bi-info-circle-fill mt-1"></i>
+  <div>
+    <strong>Satu paket kunci berisi jawaban benar untuk seluruh {{ template.n_questions }} soal.</strong>
+    Beri nama yang membedakan versi soal, misalnya <em>Paket A</em> atau <em>Paket B</em>. Nama ini akan muncul saat memilih kunci di halaman scan.
+  </div>
+</div>
+
+<form method="post">
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="packageName">Nama paket kunci</label>
+          <input class="form-control" id="packageName" type="text" name="package_name" value="{{ package_name }}" placeholder="Contoh: Paket A" required>
+          <div class="form-text">Wajib diisi dan harus berbeda dari paket lain pada templat ini.</div>
+        </div>
+        <div class="col-md-6 text-md-end">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Simpan Kunci</button>
+          {% if key %}
+          <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteKeyModal"><i class="bi bi-trash me-1"></i>Hapus</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-list-check me-1"></i>Jawaban Benar per Nomor</span>
+      <span class="badge text-bg-light">{{ answers|length }} / {{ template.n_questions }} terisi</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted-sm">Pilih satu jawaban benar untuk setiap soal. Semua nomor wajib terisi sebelum kunci dapat disimpan.</p>
+      <div class="question-grid">
+        {% for q in range(1, template.n_questions + 1) %}
+        <div class="question-item">
+          <div class="q-number mb-1">Soal {{ q }}</div>
+          <div class="option-pills">
+            {% for label in template.option_labels %}
+            <input type="radio" class="btn-check" name="q_{{ q }}" id="q{{ q }}_{{ label }}" value="{{ label }}"
+                   {{ 'checked' if answers.get(q) == label }} required>
+            <label class="btn btn-outline-primary" for="q{{ q }}_{{ label }}">{{ label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</form>
+
+{% if key %}
+<div class="modal fade" id="deleteKeyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Hapus Paket Kunci</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body">Yakin ingin menghapus paket kunci <strong>{{ key.package_name }}</strong>? Tindakan ini tidak dapat dibatalkan.</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <form method="post" action="{{ url_for('key_delete', key_id=key.id) }}">
+          <button type="submit" class="btn btn-danger">Hapus</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

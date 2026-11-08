@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<section class="dash-hero">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div class="d-flex flex-wrap gap-2">
+      <span class="badge badge-soft">Pengolahan Citra Digital</span>
+      <span class="badge badge-accent">{{ current_year }}</span>
+    </div>
+    <a href="{{ url_for('scan_page') }}" class="btn btn-outline-dark btn-pill btn-pill-sm">Scan Lembar <i class="bi bi-arrow-up-right"></i></a>
+  </div>
+
+  <div class="row g-4 align-items-end">
+    <div class="col-lg-8">
+      <h1 class="dash-title">
+        Periksa Lembar Jawaban
+        <span class="dash-title-accent">Lebih Cepat <i class="bi bi-stars"></i></span>
+        &amp; Akurat
+      </h1>
+      <p class="dash-sub">Buat templat dari lembar kosong, isi paket kunci jawaban, lalu scan banyak lembar sekaligus. Setiap tahap pengolahan citra dapat dilihat di halaman debug.</p>
+    </div>
+    <div class="col-lg-4">
+      <div class="dash-metrics">
+        <div class="dash-metric">
+          <span class="metric-dot" style="background:#7c3aed"></span>
+          <div><strong>{{ stats.templates }}</strong><small>Templat</small></div>
+        </div>
+        <div class="dash-metric" title="Satu paket kunci = satu set jawaban benar untuk satu versi soal pada satu templat.">
+          <span class="metric-dot" style="background:#f59e0b"></span>
+          <div><strong>{{ stats["keys"] }}</strong><small>Paket Kunci</small></div>
+        </div>
+        <div class="dash-metric">
+          <span class="metric-dot" style="background:#0ea5e9"></span>
+          <div><strong>{{ stats.scans }}</strong><small>Lembar Diperiksa</small></div>
+        </div>
+        <div class="dash-metric">
+          <span class="metric-dot" style="background:#ec4899"></span>
+          <div><strong>{{ "%.1f"|format(average or 0) }}</strong><small>Rata-rata Nilai</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dash-actions">
+    <a href="{{ url_for('template_new') }}" class="btn btn-primary btn-pill">Buat Templat <i class="bi bi-arrow-up-right"></i></a>
+    <a href="{{ url_for('sample_sheet') }}" class="btn btn-outline-dark btn-pill"><i class="bi bi-download me-1"></i>Contoh Lembar</a>
+    <a href="{{ url_for('keys_list') }}" class="dash-text-link">Kelola paket kunci <i class="bi bi-arrow-right"></i></a>
+  </div>
+</section>
+
+<div class="workflow-strip">
+  <a href="{{ url_for('template_new') }}" class="workflow-step">
+    <span class="workflow-orb orb-pink"><i class="bi bi-grid-3x3-gap"></i></span>
+    <span class="workflow-copy"><strong>1. Buat Templat</strong><span>Foto lembar kosong</span></span>
+  </a>
+  <a href="{{ url_for('keys_list') }}" class="workflow-step">
+    <span class="workflow-orb orb-purple"><i class="bi bi-key"></i></span>
+    <span class="workflow-copy"><strong>2. Isi Kunci</strong><span>Paket A, B, dan lainnya</span></span>
+  </a>
+  <a href="{{ url_for('scan_page') }}" class="workflow-step">
+    <span class="workflow-orb orb-blue"><i class="bi bi-camera"></i></span>
+    <span class="workflow-copy"><strong>3. Scan</strong><span>Banyak lembar sekaligus</span></span>
+  </a>
+  <a href="{{ url_for('results_list') }}" class="workflow-step">
+    <span class="workflow-orb orb-orange"><i class="bi bi-bar-chart"></i></span>
+    <span class="workflow-copy"><strong>4. Lihat Hasil</strong><span>Nilai &amp; detail jawaban</span></span>
+  </a>
+</div>
+
+<div class="dash-section-head">
+  <div>
+    <span class="section-eyebrow">Menu Utama</span>
+    <h2>Semua yang kamu butuhkan</h2>
+  </div>
+  <p>Alur singkat dari menyiapkan templat sampai melihat rekap nilai siswa.</p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <a class="quick-card" href="{{ url_for('templates_list') }}">
+      <span class="quick-arrow"><i class="bi bi-arrow-up-right"></i></span>
+      <span class="quick-icon quick-icon-purple"><i class="bi bi-grid-3x3-gap"></i></span>
+      <h3>Templat</h3>
+      <p>Atur citra acuan, jumlah soal, dan koordinat bulatan jawaban.</p>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a class="quick-card is-featured" href="{{ url_for('keys_list') }}">
+      <span class="quick-arrow"><i class="bi bi-arrow-up-right"></i></span>
+      <span class="quick-icon quick-icon-orange"><i class="bi bi-key"></i></span>
+      <h3>Paket Kunci</h3>
+      <p>Satu paket untuk satu versi soal. Kelola Paket A, Paket B, dan lainnya.</p>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a class="quick-card" href="{{ url_for('results_list') }}">
+      <span class="quick-arrow"><i class="bi bi-arrow-up-right"></i></span>
+      <span class="quick-icon quick-icon-blue"><i class="bi bi-bar-chart"></i></span>
+      <h3>Hasil</h3>
+      <p>Lihat nilai, jawaban benar/salah, kosong, ganda, dan detail per soal.</p>
+    </a>
+  </div>
+</div>
+
+<div class="cta-panel">
+  <span class="cta-eyebrow">- Mulai dalam 3 langkah -</span>
+  <h2>Buat templat, isi <span>paket kunci</span>, lalu scan lembar siswa.</h2>
+  <p>Semua proses pemeriksaan berjalan otomatis dengan thresholding dan analisis area piksel.</p>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('template_new') }}" class="btn btn-primary btn-pill">Mulai Sekarang <i class="bi bi-arrow-up-right"></i></a>
+    <a href="{{ url_for('results_list') }}" class="btn btn-outline-dark btn-pill">Lihat Hasil</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-clock-history me-1"></i>Hasil Terbaru</span>
+    <a href="{{ url_for('results_list') }}" class="btn btn-sm btn-outline-primary">Lihat semua</a>
+  </div>
+  <div class="card-body p-0">
+    {% if recent %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th class="ps-3">Nama Siswa</th>
+            <th>Templat</th>
+            <th class="text-center" title="Jumlah soal yang jawabannya sama dengan kunci.">Benar</th>
+            <th class="text-center" title="Jumlah soal yang jawabannya berbeda dari kunci.">Salah</th>
+            <th class="text-center" title="Jumlah soal yang tidak dijawab (tidak ada bulatan terisi).">Kosong</th>
+            <th class="text-center" title="Jumlah soal yang memiliki lebih dari satu bulatan terisi.">Ganda</th>
+            <th class="text-end">Nilai</th>
+            <th class="text-end pe-3">Waktu</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent %}
+          <tr>
+            <td class="ps-3"><a href="{{ url_for('result_detail', result_id=row.id) }}" class="fw-semibold text-decoration-none">{{ row.student_name }}</a></td>
+            <td class="text-muted-sm">{{ row.template.name }}</td>
+            <td class="text-center">{{ row.correct }}</td>
+            <td class="text-center">{{ row.wrong }}</td>
+            <td class="text-center">{{ row.empty }}</td>
+            <td class="text-center">{{ row.double }}</td>
+            <td class="text-end"><span class="badge text-bg-{{ row.status_class }}">{{ "%.1f"|format(row.score) }}</span></td>
+            <td class="text-end pe-3 text-muted-sm">{{ row.created_at|datetime_id }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-4 text-center text-muted">
+      <i class="bi bi-inbox display-5 d-block mb-2"></i>
+      Belum ada hasil. Mulai dengan membuat templat dan scan lembar jawaban.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Pratinjau Gambar</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img src="" alt="Pratinjau" class="img-fluid">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

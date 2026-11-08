@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Hasil &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Hasil Pemeriksaan</h1>
+    <p class="lead">Daftar nilai dan rekap jawaban siswa dari seluruh pemeriksaan.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ export_url }}" class="btn btn-outline-success {{ 'disabled' if not results }}"><i class="bi bi-file-earmark-excel me-1"></i>Export Excel</a>
+    <a href="{{ url_for('scan_page') }}" class="btn btn-primary"><i class="bi bi-camera me-1"></i>Scan Lembar</a>
+  </div>
+</div>
+
+{% if filters.batch %}
+<div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <span><i class="bi bi-collection me-1"></i>Menampilkan hasil dari satu batch pemeriksaan <code>{{ filters.batch[:8] }}</code>.</span>
+  <a href="{{ url_for('results_list') }}" class="btn btn-sm btn-outline-primary">Tampilkan semua</a>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card bg-1 h-100">
+      <div class="card-body">
+        <div class="mini-label text-white-50">Lembar</div>
+        <div class="display-6 fw-bold">{{ summary.total }}</div>
+        <i class="bi bi-file-earmark-check stat-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card bg-2 h-100">
+      <div class="card-body">
+        <div class="mini-label text-white-50">Rata-rata Nilai</div>
+        <div class="display-6 fw-bold">{{ "%.1f"|format(summary.average) }}</div>
+        <i class="bi bi-graph-up stat-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card bg-4 h-100">
+      <div class="card-body">
+        <div class="mini-label text-white-50">Nilai Tertinggi</div>
+        <div class="display-6 fw-bold">{{ "%.1f"|format(summary.highest) }}</div>
+        <i class="bi bi-trophy stat-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card bg-3 h-100">
+      <div class="card-body">
+        <div class="mini-label text-white-50">Tuntas (&ge; 75)</div>
+        <div class="display-6 fw-bold">{{ summary.passed }}<span class="fs-6 fw-normal opacity-75">/{{ summary.total }}</span></div>
+        <i class="bi bi-patch-check stat-icon"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" action="{{ url_for('results_list') }}" class="row g-3 align-items-end">
+      {% if filters.batch %}<input type="hidden" name="batch" value="{{ filters.batch }}">{% endif %}
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Cari nama siswa</label>
+        <input class="form-control" type="search" placeholder="Ketik nama atau NIM..." data-table-filter="#resultsTable">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold" for="filterTemplate">Templat</label>
+        <select class="form-select" id="filterTemplate" name="template_id">
+          <option value="">Semua templat</option>
+          {% for t in templates %}
+          <option value="{{ t.id }}" {{ 'selected' if filters.template_id == t.id }}>{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold" for="filterGrade">Keterangan</label>
+        <select class="form-select" id="filterGrade" name="grade">
+          <option value="">Semua nilai</option>
+          <option value="lulus" {{ 'selected' if filters.grade == 'lulus' }}>Tuntas (&ge; 75)</option>
+          <option value="remedial" {{ 'selected' if filters.grade == 'remedial' }}>Remedial (&lt; 75)</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button class="btn btn-primary flex-fill" type="submit"><i class="bi bi-funnel me-1"></i>Filter</button>
+        <a href="{{ url_for('results_list') }}" class="btn btn-outline-secondary" title="Reset filter"><i class="bi bi-arrow-counterclockwise"></i></a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-table me-1"></i>Daftar Hasil</span>
+    <span class="badge text-bg-light">{{ results|length }} baris</span>
+  </div>
+  <div class="card-body p-0">
+    {% if results %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="resultsTable" data-sortable>
+        <thead>
+          <tr>
+            <th class="ps-3" data-sort="0">Nama Siswa</th>
+            <th data-sort="1">NIM / Kelas</th>
+            <th data-sort="2">Templat</th>
+            <th data-sort="3">Paket Kunci Jawaban</th>
+            <th class="text-center" data-sort="4" title="Jumlah soal yang jawabannya sama dengan kunci.">Benar</th>
+            <th class="text-center" data-sort="5" title="Jumlah soal yang jawabannya berbeda dari kunci.">Salah</th>
+            <th class="text-center" data-sort="6" title="Jumlah soal yang tidak dijawab (tidak ada bulatan terisi).">Kosong</th>
+            <th class="text-center" data-sort="7" title="Jumlah soal yang memiliki lebih dari satu bulatan terisi.">Ganda</th>
+            <th class="text-end" data-sort="8">Nilai</th>
+            <th data-sort="9">Waktu</th>
+            <th class="text-end pe-3">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in results %}
+          <tr>
+            <td class="ps-3">
+              <a href="{{ url_for('result_detail', result_id=row.id) }}" class="fw-semibold text-decoration-none">{{ row.student_name }}</a>
+              {% if row.quality_warning %}<i class="bi bi-exclamation-triangle text-warning ms-1" title="{{ row.quality_warning }}"></i>{% endif %}
+            </td>
+            <td class="text-muted-sm">{{ [row.student_no, row.class_name]|select|join(' / ') or '-' }}</td>
+            <td class="text-muted-sm">{{ row.template.name if row.template else '-' }}</td>
+            <td class="text-muted-sm">{{ row.key.package_name if row.key else '-' }}</td>
+            <td class="text-center">{{ row.correct }}</td>
+            <td class="text-center">{{ row.wrong }}</td>
+            <td class="text-center">{{ row.empty }}</td>
+            <td class="text-center">{{ row.double }}</td>
+            <td class="text-end"><span class="badge text-bg-{{ row.status_class }}">{{ "%.1f"|format(row.score) }}</span></td>
+            <td class="text-muted-sm">{{ row.created_at|datetime_id }}</td>
+            <td class="text-end pe-3 text-nowrap">
+              <a href="{{ url_for('result_detail', result_id=row.id) }}" class="btn btn-sm btn-outline-primary" title="Detail"><i class="bi bi-eye"></i></a>
+              <form method="post" action="{{ url_for('result_delete', result_id=row.id) }}" class="d-inline" data-confirm="Hapus hasil pemeriksaan '{{ row.student_name }}'?">
+                <button class="btn btn-sm btn-outline-danger" type="submit" title="Hapus"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-4 text-center text-muted">
+      <i class="bi bi-inbox display-5 d-block mb-2"></i>
+      Belum ada hasil yang cocok. Mulai dengan scan lembar jawaban.
+      <div class="mt-3">
+        <a href="{{ url_for('scan_page') }}" class="btn btn-primary btn-sm"><i class="bi bi-camera me-1"></i>Scan Lembar</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

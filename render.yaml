@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: pilgan-checker
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PILGAN_DATA_DIR
+        value: /var/data
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_USERNAME
+        value: admin
+      - key: APP_PASSWORD
+        sync: false
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: WEB_THREADS
+        value: "4"
+      - key: GUNICORN_TIMEOUT
+        value: "300"
+    disk:
+      name: pilgan-data
+      mountPath: /var/data
+      sizeGB: 1

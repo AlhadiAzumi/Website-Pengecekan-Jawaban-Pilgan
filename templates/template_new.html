@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Buat Templat &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Buat Templat</h1>
+    <p class="lead">Unggah lembar jawaban kosong, atur jumlah soal/opsi, lalu periksa hasil deteksi bulatan.</p>
+  </div>
+  <a href="{{ url_for('sample_sheet') }}" class="btn btn-outline-primary"><i class="bi bi-download me-1"></i>Lembar Contoh</a>
+</div>
+
+<form method="post" enctype="multipart/form-data" id="templateForm">
+  <input type="hidden" name="tmp_ref" value="{{ tmp_ref or '' }}">
+  <input type="hidden" name="tmp_src" value="{{ tmp_src or '' }}">
+  <input type="hidden" name="tmp_debug_id" value="{{ tmp_debug_id or '' }}">
+  <input type="hidden" name="original_name" value="{{ original_name or '' }}">
+  <input type="hidden" name="rectified" value="{{ rectified or 'resize' }}">
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-image me-1"></i>1. Citra Lembar Kosong</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Gambar lembar jawaban kosong</label>
+            <input class="form-control" type="file" name="image" accept="image/*" {% if not tmp_ref %}required{% endif %}>
+            <div class="form-text">
+              Foto seluruh lembar dengan 4 sudut terlihat. Untuk hasil terbaik, gunakan lembar contoh yang memiliki marker sudut.
+              {% if tmp_ref %}<span class="text-success">Gambar sudah diunggah; unggah file baru hanya jika ingin menggantinya.</span>{% endif %}
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nama templat</label>
+            <input class="form-control" type="text" name="name" value="{{ form.name }}" placeholder="Contoh: UTS Pengolahan Citra - Paket A">
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Jumlah soal</label>
+              <input class="form-control" type="number" name="n_questions" min="1" max="300" value="{{ form.n_questions }}" required>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Opsi per soal</label>
+              <select class="form-select" name="n_options">
+                {% for n in [2,3,4,5] %}
+                <option value="{{ n }}" {{ 'selected' if form.n_options == n }}>A - {{ 'ABCDE'[n-1] }} ({{ n }})</option>
+                {% endfor %}
+                {% for n in [6,7,8,9,10] %}
+                <option value="{{ n }}" {{ 'selected' if form.n_options == n }}>{{ n }} opsi</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Blok / kolom</label>
+              <select class="form-select" name="n_blocks">
+                <option value="0" {{ 'selected' if form.n_blocks == 0 }}>Deteksi otomatis</option>
+                {% for n in [1,2,3,4] %}
+                <option value="{{ n }}" {{ 'selected' if form.n_blocks == n }}>{{ n }} blok</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-sliders me-1"></i>2. Parameter Deteksi</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Threshold manual</label>
+              <span class="slider-value" id="thresholdValue">{{ form.params.detect_threshold }}</span>
+            </div>
+            <input class="form-range" type="range" name="detect_threshold" min="0" max="255" step="1"
+                   value="{{ form.params.detect_threshold }}" data-output="#thresholdValue" data-decimals="0">
+            <div class="form-text">0 = Otsu otomatis. Naikkan jika banyak bayangan ikut terdeteksi.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Luas min (px)</label>
+              <input class="form-control" type="number" name="min_area" min="8" max="100000" value="{{ form.params.min_area }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Luas max (px)</label>
+              <input class="form-control" type="number" name="max_area" min="50" max="500000" value="{{ form.params.max_area }}">
+            </div>
+          </div>
+          <div class="mt-3">
+            <div class="d-flex justify-content-between">
+              <label class="form-label fw-semibold mb-1">Circularity minimum</label>
+              <span class="slider-value" id="circValue">{{ "%.2f"|format(form.params.circularity) }}</span>
+            </div>
+            <input class="form-range" type="range" name="circularity" min="0.30" max="0.95" step="0.01"
+                   value="{{ form.params.circularity }}" data-output="#circValue" data-decimals="2">
+            <div class="form-text">Turunkan jika bulatan tidak terdeteksi karena cetakan tidak sempurna.</div>
+          </div>
+          <div class="alert alert-light border mt-3 mb-0 small">
+            <i class="bi bi-info-circle me-1"></i>
+            Deteksi memakai thresholding + contour + filter luas/circularity. Fallback HoughCircles aktif bila kandidat terlalu sedikit.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if detection %}
+  <div class="card mt-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span><i class="bi bi-bullseye me-1"></i>3. Hasil Deteksi</span>
+      <div class="d-flex flex-wrap gap-2">
+        <span class="badge text-bg-{{ 'success' if detection.success else 'warning' }}">
+          {{ detection.bubbles|length }} / {{ detection.expected }} {{ 'huruf' if detection.cell_mode == 'letter' else 'bulatan' }}
+        </span>
+        <span class="badge text-bg-light">Kandidat: {{ detection.detected }}</span>
+        <span class="badge text-bg-light">Blok: {{ detection.n_blocks or '-' }}</span>
+        <span class="badge text-bg-light">Metode: {{ 'huruf (tanpa bulatan)' if detection.strategy == 'letters' else (detection.strategy or '-') }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if detection.success %}
+      <div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>{{ 'Semua huruf jawaban berhasil dipetakan (lembar tanpa bulatan cetak).' if detection.cell_mode == 'letter' else 'Jumlah bulatan sesuai.' }} Templat siap disimpan.</div>
+      {% else %}
+      <div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-1"></i>{{ 'Jumlah sel jawaban' if detection.cell_mode == 'letter' else 'Jumlah bulatan' }} belum sesuai. Sesuaikan parameter lalu klik <strong>Deteksi Ulang</strong>.</div>
+      <ul class="warning-list text-muted-sm mb-3">
+        {% for warning in detection.warnings %}<li>{{ warning }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      <div class="text-muted-sm mb-2">
+        Rektifikasi: <strong>{{ rectified }}</strong> &middot; Marker sudut: <strong>{{ marker_count }}</strong> &middot;
+        Ukuran acuan: {{ ref_width }} x {{ ref_height }} px
+      </div>
+      <div class="image-frame bubble-preview">
+        <img src="{{ preview_url }}" alt="Preview deteksi bulatan" data-zoomable>
+      </div>
+      {% if debug_items %}
+      <div class="mt-3">
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#debugTahap">
+          <i class="bi bi-images me-1"></i>Lihat tahapan citra
+        </button>
+        <div class="collapse mt-2" id="debugTahap">
+          <div class="debug-gallery">
+            {% for item in debug_items %}
+            <div class="debug-item">
+              <img src="{{ item.path|media_url }}" alt="{{ item.label }}">
+              <div class="debug-caption">{{ item.label }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-footer bg-white d-flex flex-wrap gap-2">
+      <button type="submit" name="action" value="redetect" class="btn btn-outline-primary"><i class="bi bi-arrow-repeat me-1"></i>Deteksi Ulang</button>
+      <button type="submit" name="action" value="save" class="btn btn-success" {{ 'disabled' if not detection.success }}><i class="bi bi-save me-1"></i>Simpan Templat</button>
+      <a href="{{ url_for('template_new') }}" class="btn btn-outline-secondary">Mulai Ulang</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="d-flex flex-wrap gap-2 mt-3">
+    <button type="submit" name="action" value="preview" class="btn btn-primary"><i class="bi bi-search me-1"></i>Deteksi Bulatan</button>
+    <a href="{{ url_for('templates_list') }}" class="btn btn-outline-secondary">Batal</a>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

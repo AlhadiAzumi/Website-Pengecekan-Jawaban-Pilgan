@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Paket Kunci {{ template.name }} &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Paket Kunci Jawaban</h1>
+    <p class="lead">{{ template.name }} &middot; {{ template.n_questions }} soal &middot; opsi {{ template.option_labels|join(', ') }}</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('keys_list') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Semua Paket</a>
+    <a href="{{ url_for('template_detail', template_id=template.id) }}" class="btn btn-outline-secondary">Detail Templat</a>
+    <a href="{{ url_for('scan_page', template_id=template.id) }}" class="btn btn-success"><i class="bi bi-camera me-1"></i>Scan</a>
+  </div>
+</div>
+
+<div class="alert alert-info d-flex gap-2 align-items-start">
+  <i class="bi bi-info-circle-fill mt-1"></i>
+  <div>
+    <strong>Satu paket kunci = satu versi soal pada templat ini.</strong>
+    Kalau lembar UTS punya versi A dan B, buat dua paket (misalnya <em>Paket A</em> dan <em>Paket B</em>). Saat scan, pilih paket yang sesuai dengan lembar siswa.
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-pencil-square me-1"></i>Isi Manual lewat Form</div>
+      <div class="card-body">
+        <form method="get" action="{{ url_for('key_new', template_id=template.id) }}">
+          <label class="form-label fw-semibold" for="newPackageName">Nama paket kunci</label>
+          <input class="form-control" id="newPackageName" type="text" name="package" placeholder="Contoh: Paket A" required>
+          <div class="form-text mb-3">Gunakan nama pembeda yang mudah dikenali, misalnya <em>Paket A</em>, <em>Paket B</em>, atau <em>Versi Susulan</em>.</div>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-right me-1"></i>Lanjut Isi Kunci</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-file-earmark-excel me-1"></i>Impor dari Excel</span>
+        <a href="{{ url_for('key_example', template_id=template.id) }}" class="btn btn-sm btn-outline-success"><i class="bi bi-download me-1"></i>Contoh XLSX</a>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('key_upload', template_id=template.id) }}" enctype="multipart/form-data">
+          <label class="form-label fw-semibold" for="uploadPackageName">Nama paket kunci <span class="text-muted fw-normal">(opsional)</span></label>
+          <input class="form-control" id="uploadPackageName" type="text" name="package_name" placeholder="Kosongkan untuk memakai nama file">
+          <div class="form-text mb-3">Jika dikosongkan, nama paket diambil dari nama file Excel.</div>
+          <label class="form-label fw-semibold" for="excelFile">File Excel (.xlsx)</label>
+          <input class="form-control" id="excelFile" type="file" name="excel" accept=".xlsx" required>
+          <div class="form-text mb-3">Kolom wajib: <code>No</code> dan <code>Kunci</code>. Jumlah baris harus sama dengan jumlah soal ({{ template.n_questions }}).</div>
+          <button class="btn btn-success" type="submit"><i class="bi bi-upload me-1"></i>Impor Kunci</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-key me-1"></i>Daftar Paket Kunci</span>
+    <span class="badge text-bg-light">{{ keys|length }} paket</span>
+  </div>
+  <div class="card-body p-0">
+    {% if keys %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" data-sortable>
+        <thead>
+          <tr>
+            <th class="ps-3" data-sort="0">Paket</th>
+            <th class="text-center" data-sort="1">Terisi</th>
+            <th>Pratinjau Kunci</th>
+            <th data-sort="3">Dibuat</th>
+            <th class="text-end pe-3">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key in keys %}
+          <tr>
+            <td class="ps-3 fw-semibold">{{ key.package_name }}</td>
+            <td class="text-center">
+              <span class="badge text-bg-{{ 'success' if key.items|length == template.n_questions else 'warning' }}">
+                {{ key.items|length }} / {{ template.n_questions }}
+              </span>
+            </td>
+            <td><code class="text-muted">{{ key.answer_string[:48] }}{% if key.answer_string|length > 48 %}...{% endif %}</code></td>
+            <td class="text-muted-sm">{{ key.created_at|datetime_id }}</td>
+            <td class="text-end pe-3">
+              <div class="d-inline-flex gap-1">
+                <a href="{{ url_for('key_edit', key_id=key.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil-square me-1"></i>Buka</a>
+                <a href="{{ url_for('scan_page', template_id=template.id, key_id=key.id) }}" class="btn btn-sm btn-outline-success"><i class="bi bi-camera me-1"></i>Scan</a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-key display-5 d-block mb-2"></i>
+      <p class="mb-1 fw-semibold">Belum ada paket kunci untuk templat ini</p>
+      <p class="mb-0">Isi lewat form di atas, atau impor dari file Excel.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
