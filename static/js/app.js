@@ -144,15 +144,122 @@
     });
   });
 
-  document.querySelectorAll(".debug-item img, .image-frame img[data-zoomable]").forEach(function (img) {
-    img.style.cursor = "zoom-in";
-    img.addEventListener("click", function () {
-      var modalEl = document.getElementById("imagePreviewModal");
-      if (!modalEl) return;
-      var target = modalEl.querySelector("img");
-      target.src = img.src;
-      target.alt = img.alt || "Pratinjau gambar";
-      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  var previewModalEl = document.getElementById("imagePreviewModal");
+  if (previewModalEl && window.bootstrap) {
+    var previewModal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
+    var previewImage = previewModalEl.querySelector("[data-preview-image]");
+    var previewStage = previewModalEl.querySelector("[data-preview-stage]");
+    var previewTitle = previewModalEl.querySelector("#imagePreviewTitle");
+    var previewZoomLevel = previewModalEl.querySelector("[data-preview-zoom-level]");
+    var previewOpen = previewModalEl.querySelector("[data-preview-open]");
+    var previewScale = 1;
+    var previewX = 0;
+    var previewY = 0;
+    var dragState = null;
+
+    function clampPreviewPan() {
+      var maxX = (previewStage.clientWidth * Math.max(0, previewScale - 1)) / 2;
+      var maxY = (previewStage.clientHeight * Math.max(0, previewScale - 1)) / 2;
+      previewX = Math.max(-maxX, Math.min(maxX, previewX));
+      previewY = Math.max(-maxY, Math.min(maxY, previewY));
+    }
+
+    function applyPreviewTransform() {
+      clampPreviewPan();
+      previewImage.style.transform =
+        "translate(" + previewX + "px, " + previewY + "px) scale(" + previewScale + ")";
+      if (previewZoomLevel) {
+        previewZoomLevel.textContent = Math.round(previewScale * 100) + "%";
+      }
+    }
+
+    function resetPreview() {
+      previewScale = 1;
+      previewX = 0;
+      previewY = 0;
+      applyPreviewTransform();
+    }
+
+    function setPreviewZoom(value) {
+      previewScale = Math.max(0.5, Math.min(4, value));
+      applyPreviewTransform();
+    }
+
+    function openPreview(img) {
+      previewImage.src = img.currentSrc || img.src;
+      previewImage.alt = img.alt || "Pratinjau gambar";
+      if (previewTitle) previewTitle.textContent = img.alt || "Pratinjau Gambar";
+      if (previewOpen) previewOpen.href = img.currentSrc || img.src;
+      resetPreview();
+      previewModal.show();
+    }
+
+    document.querySelectorAll("[data-zoomable], .debug-item img").forEach(function (img) {
+      if (img.tagName !== "IMG") return;
+      img.style.cursor = "zoom-in";
+      img.addEventListener("click", function () {
+        openPreview(img);
+      });
     });
-  });
+
+    var zoomIn = previewModalEl.querySelector("[data-preview-zoom-in]");
+    var zoomOut = previewModalEl.querySelector("[data-preview-zoom-out]");
+    var zoomReset = previewModalEl.querySelector("[data-preview-reset]");
+    if (zoomIn) zoomIn.addEventListener("click", function () { setPreviewZoom(previewScale + 0.25); });
+    if (zoomOut) zoomOut.addEventListener("click", function () { setPreviewZoom(previewScale - 0.25); });
+    if (zoomReset) zoomReset.addEventListener("click", resetPreview);
+
+    previewStage.addEventListener("wheel", function (event) {
+      event.preventDefault();
+      setPreviewZoom(previewScale + (event.deltaY < 0 ? 0.2 : -0.2));
+    }, { passive: false });
+
+    previewStage.addEventListener("dblclick", function () {
+      setPreviewZoom(previewScale > 1 ? 1 : 2);
+    });
+
+    previewStage.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      dragState = {
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: previewX,
+        originY: previewY,
+        pointerId: event.pointerId,
+      };
+      previewStage.classList.add("is-dragging");
+      if (previewStage.setPointerCapture) {
+        previewStage.setPointerCapture(event.pointerId);
+      }
+      event.preventDefault();
+    });
+
+    previewStage.addEventListener("pointermove", function (event) {
+      if (!dragState) return;
+      previewX = dragState.originX + (event.clientX - dragState.startX);
+      previewY = dragState.originY + (event.clientY - dragState.startY);
+      applyPreviewTransform();
+    });
+
+    function endPreviewDrag(event) {
+      if (!dragState) return;
+      if (previewStage.releasePointerCapture && event.pointerId !== undefined) {
+        try { previewStage.releasePointerCapture(event.pointerId); } catch (error) { /* diabaikan */ }
+      }
+      dragState = null;
+      previewStage.classList.remove("is-dragging");
+    }
+
+    previewStage.addEventListener("pointerup", endPreviewDrag);
+    previewStage.addEventListener("pointercancel", endPreviewDrag);
+    previewImage.addEventListener("dragstart", function (event) {
+      event.preventDefault();
+    });
+
+    previewModalEl.addEventListener("hidden.bs.modal", function () {
+      dragState = null;
+      previewStage.classList.remove("is-dragging");
+      resetPreview();
+    });
+  }
 })();

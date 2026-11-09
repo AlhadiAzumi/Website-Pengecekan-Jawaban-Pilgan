@@ -110,6 +110,41 @@
   </div>
 </div>
 
+<div class="modal fade image-preview-modal" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="imagePreviewTitle">Pratinjau Gambar</h5>
+        <div class="preview-tools">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-preview-zoom-out aria-label="Perkecil gambar">
+            <i class="bi bi-zoom-out" aria-hidden="true"></i>
+          </button>
+          <span class="preview-zoom-level" data-preview-zoom-level aria-live="polite">100%</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-preview-zoom-in aria-label="Perbesar gambar">
+            <i class="bi bi-zoom-in" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-preview-reset aria-label="Kembalikan ukuran">
+            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+          </button>
+          <a class="btn btn-sm btn-outline-secondary" data-preview-open href="#" target="_blank" rel="noopener">
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">Asli</span>
+          </a>
+          <button type="button" class="btn-close ms-1" data-bs-dismiss="modal" aria-label="Tutup"></button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="preview-stage" data-preview-stage>
+          <img src="" alt="Pratinjau" data-preview-image>
+        </div>
+        <p class="preview-hint">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+          Gunakan tombol zoom, scroll pada gambar, atau seret untuk menggeser. Tekan Esc untuk menutup.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js', v=asset_version) }}"></script>
