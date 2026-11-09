@@ -105,6 +105,13 @@ body {
   letter-spacing: -0.02em;
 }
 
+.app-navbar .brand-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -1775,6 +1782,10 @@ h1, h2, h3, h4, h5, h6 {
   .app-shell {
     padding: 0.65rem 0.75rem 0;
     border-radius: 20px;
+  }
+
+  .app-navbar .brand-name {
+    font-size: 1.08rem;
   }
 
   .app-main {
