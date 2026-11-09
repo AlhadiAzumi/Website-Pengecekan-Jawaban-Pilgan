@@ -211,7 +211,15 @@
 
     previewStage.addEventListener("wheel", function (event) {
       event.preventDefault();
-      setPreviewZoom(previewScale + (event.deltaY < 0 ? 0.2 : -0.2));
+      if (event.ctrlKey || event.metaKey) {
+        setPreviewZoom(previewScale + (event.deltaY < 0 ? 0.2 : -0.2));
+        return;
+      }
+      if (previewScale > 1) {
+        previewX -= event.deltaX;
+        previewY -= event.deltaY;
+        applyPreviewTransform();
+      }
     }, { passive: false });
 
     previewStage.addEventListener("dblclick", function () {
