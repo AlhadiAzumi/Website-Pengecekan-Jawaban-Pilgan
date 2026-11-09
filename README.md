@@ -103,8 +103,43 @@ Panduan lengkap ada di [`DEPLOY_RENDER.md`](DEPLOY_RENDER.md). Ringkasnya:
 
 1. Push project ke GitHub/GitLab/Bitbucket.
 2. Di Render, pilih **New → Blueprint** dan hubungkan repository.
-3. Isi `APP_PASSWORD` saat diminta, lalu Apply.
-4. Buka URL service dan login dengan username `admin`.
+3. Pilih blueprint:
+   - `render-free.yaml` → gratis, tanpa kartu, data sementara (cocok demo).
+   - `render.yaml` → berbayar, data permanen dengan persistent disk.
+4. Isi `APP_PASSWORD` saat diminta, lalu Apply.
+5. Buka URL service dan login dengan username `admin`.
 
-Catatan penting: persistent disk hanya tersedia di paket berbayar. Pada paket gratis, database dan file upload akan hilang saat restart/redeploy. SQLite sudah cukup untuk skala kecil; isi `DATABASE_URL` jika ingin memakai PostgreSQL.
+Catatan penting: persistent disk hanya tersedia di paket berbayar. Pada paket gratis, database dan file upload akan hilang saat restart/redeploy/spin-down. SQLite sudah cukup untuk skala kecil; isi `DATABASE_URL` jika ingin memakai PostgreSQL.
+
+## 10. Menjalankan Web App untuk Demo Lokal
+
+Cara cepat:
+
+- Double-click **`demo.bat`**, atau
+- Jalankan di PowerShell:
+  ```powershell
+  .\demo.ps1
+  ```
+
+Script akan:
+
+1. Mendeteksi virtualenv (`.venv` atau `venv`) atau memakai `python` global.
+2. Mencari port kosong mulai dari `5000`.
+3. Menjalankan Flask tanpa auto-reload.
+4. Membuka browser otomatis setelah server siap.
+
+Semua aset tampilan (Bootstrap, Bootstrap Icons, Chart.js, dan font Poppins) disimpan di `static/vendor/`, jadi UI tetap tampil normal tanpa koneksi internet.
+
+Untuk menjalankan tanpa membuka browser:
+
+```powershell
+.\demo.ps1 -NoBrowser
+```
+
+Data demo tetap tersimpan di `instance/pilgan.db` dan `uploads/`. Backup keduanya sebelum presentasi:
+
+```powershell
+Compress-Archive -Path instance, uploads -DestinationPath backup-demo.zip
+```
+
 

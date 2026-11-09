@@ -1,0 +1,34 @@
+# Blueprint Render versi GRATIS (tanpa kartu/rekening).
+#
+# Konsekuensi paket free:
+# - CPU 0.1 / RAM 512 MB, spin-down setelah 15 menit idle.
+# - Tidak bisa memakai persistent disk.
+# - Database & file upload HILANG setiap restart/redeploy/spin-down.
+# - Cocok untuk demo/presentasi, bukan data permanen.
+#
+# Saat membuat Blueprint di Render, pilih file ini (bukan render.yaml).
+
+services:
+  - type: web
+    name: pilgan-checker
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      # Data ditulis ke folder sementara di dalam container.
+      - key: PILGAN_DATA_DIR
+        value: /tmp/pilgan-data
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_USERNAME
+        value: admin
+      - key: APP_PASSWORD
+        sync: false
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: WEB_THREADS
+        value: "2"
+      - key: GUNICORN_TIMEOUT
+        value: "300"

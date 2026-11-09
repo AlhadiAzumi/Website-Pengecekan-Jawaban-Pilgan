@@ -1,8 +1,13 @@
 """Aplikasi web Sistem Pemeriksaan Lembar Jawaban Pilihan Ganda."""
 import json
+import mimetypes
 import os
 import shutil
 from datetime import datetime
+
+# Pastikan file font lokal dilayani dengan MIME yang benar (demo offline).
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/woff", ".woff")
 
 import cv2
 from flask import (
