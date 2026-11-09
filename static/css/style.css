@@ -953,7 +953,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .debug-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.9rem;
 }
 
@@ -1147,6 +1147,10 @@ h1, h2, h3, h4, h5, h6 {
     text-align: left;
     max-width: none;
   }
+
+  .debug-gallery {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 576px) {
@@ -1195,6 +1199,10 @@ h1, h2, h3, h4, h5, h6 {
 
   .debug-item img {
     height: 160px;
+  }
+
+  .debug-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cta-panel {
