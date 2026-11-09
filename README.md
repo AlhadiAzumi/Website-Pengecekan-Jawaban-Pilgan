@@ -175,4 +175,14 @@ Data demo tetap tersimpan di `instance/pilgan.db` dan `uploads/`. Backup keduany
 Compress-Archive -Path instance, uploads -DestinationPath backup-demo.zip
 ```
 
+### Ambil Foto Langsung dari Kamera
+
+Di halaman **Buat Templat** dan **Scan & Periksa** ada tombol **Ambil Foto**, jadi gambar tidak harus diambil di luar aplikasi.
+
+- Di laptop yang membuka `http://localhost:5000`, kamera langsung tampil di dalam jendela aplikasi. Foto bisa diulang sebelum dipakai.
+- Di HP yang membuka alamat LAN `http://192.168.x.x:5000`, browser memblokir kamera langsung karena koneksi belum HTTPS. Tombol **Ambil Foto** otomatis membuka kamera bawaan HP, lalu fotonya langsung masuk kembali ke aplikasi tanpa perlu menyalin file manual.
+- Jika kamera langsung ditolak atau tidak tersedia, tersedia tombol **Kamera perangkat** dan **Pilih File** sebagai cadangan.
+
+Untuk hasil terbaik, foto seluruh lembar dengan keempat sudut terlihat, cahaya cukup, dan kamera tidak goyang.
+
 

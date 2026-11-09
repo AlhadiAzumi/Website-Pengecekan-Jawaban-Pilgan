@@ -270,4 +270,286 @@
       resetPreview();
     });
   }
+
+  var cameraModalEl = document.getElementById("cameraModal");
+  if (cameraModalEl && window.bootstrap) {
+    var cameraModal = bootstrap.Modal.getOrCreateInstance(cameraModalEl);
+    var cameraVideo = cameraModalEl.querySelector("[data-camera-video]");
+    var cameraPhoto = cameraModalEl.querySelector("[data-camera-photo]");
+    var cameraStage = cameraModalEl.querySelector("[data-camera-stage]");
+    var cameraState = cameraModalEl.querySelector("[data-camera-state]");
+    var cameraStateText = cameraModalEl.querySelector("[data-camera-state-text]");
+    var cameraStatus = cameraModalEl.querySelector("[data-camera-status]");
+    var cameraShoot = cameraModalEl.querySelector("[data-camera-shoot]");
+    var cameraRetake = cameraModalEl.querySelector("[data-camera-retake]");
+    var cameraUse = cameraModalEl.querySelector("[data-camera-use]");
+    var cameraFallbackBtn = cameraModalEl.querySelector("[data-camera-fallback]");
+    var cameraDefaultStatus = cameraStatus ? cameraStatus.textContent.trim() : "";
+    var cameraStream = null;
+    var cameraFile = null;
+    var cameraPhotoUrl = null;
+    var cameraTrigger = null;
+    var cameraFallbackSelector = null;
+    var cameraSession = 0;
+
+    if (cameraVideo) {
+      cameraVideo.addEventListener("loadedmetadata", function () {
+        if (cameraStream) cameraHideState();
+      });
+    }
+
+    function cameraCanUseLive() {
+      return !!(
+        window.isSecureContext &&
+        navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === "function"
+      );
+    }
+
+    function cameraToggle(el, visible) {
+      if (el) el.hidden = !visible;
+    }
+
+    function cameraShowState(message, isError) {
+      if (!cameraState) return;
+      cameraState.hidden = false;
+      cameraState.classList.toggle("is-error", !!isError);
+      if (cameraStateText) cameraStateText.textContent = message;
+    }
+
+    function cameraHideState() {
+      if (cameraState) cameraState.hidden = true;
+    }
+
+    function cameraSetStatus(message) {
+      if (cameraStatus) cameraStatus.textContent = message;
+    }
+
+    function cameraStopStream() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+        cameraStream = null;
+      }
+      if (cameraVideo) cameraVideo.srcObject = null;
+    }
+
+    function cameraReleasePhoto() {
+      if (cameraPhotoUrl) {
+        URL.revokeObjectURL(cameraPhotoUrl);
+        cameraPhotoUrl = null;
+      }
+      cameraFile = null;
+      if (cameraPhoto) {
+        cameraPhoto.hidden = true;
+        cameraPhoto.removeAttribute("src");
+      }
+    }
+
+    function cameraResetButtons() {
+      cameraToggle(cameraShoot, false);
+      cameraToggle(cameraRetake, false);
+      cameraToggle(cameraUse, false);
+      cameraToggle(cameraFallbackBtn, false);
+    }
+
+    function cameraShowLive() {
+      cameraReleasePhoto();
+      if (cameraStage) cameraStage.classList.remove("is-captured");
+      if (cameraVideo) cameraVideo.hidden = false;
+      cameraResetButtons();
+    }
+
+    function cameraShowError(message) {
+      cameraStopStream();
+      if (cameraVideo) cameraVideo.hidden = true;
+      cameraShowState(message, true);
+      cameraResetButtons();
+      cameraToggle(cameraFallbackBtn, !!cameraFallbackSelector);
+      cameraSetStatus(
+        cameraFallbackSelector
+          ? "Klik tombol Kamera perangkat untuk membuka kamera bawaan HP, atau tutup jendela ini."
+          : "Kamera langsung tidak dapat dipakai. Tutup jendela ini lalu pilih file foto."
+      );
+    }
+
+    function cameraStartStream() {
+      var session = ++cameraSession;
+      cameraShowLive();
+      cameraShowState("Menyiapkan kamera...");
+      cameraSetStatus(cameraDefaultStatus);
+      cameraToggle(cameraFallbackBtn, false);
+
+      if (!cameraCanUseLive()) {
+        cameraShowError(
+          "Kamera langsung hanya bisa dipakai lewat localhost atau HTTPS. " +
+            "Pada akses LAN biasa (http://), gunakan kamera perangkat lewat tombol di bawah."
+        );
+        return;
+      }
+
+      navigator.mediaDevices
+        .getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1440 },
+          },
+        })
+        .then(function (stream) {
+          if (session !== cameraSession) {
+            stream.getTracks().forEach(function (track) {
+              track.stop();
+            });
+            return;
+          }
+          cameraStream = stream;
+          if (cameraVideo) {
+            cameraVideo.srcObject = stream;
+            var playPromise = cameraVideo.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+              playPromise.catch(function () {
+                /* autoplay bisa ditolak; gambar tetap tampil setelah metadata siap */
+              });
+            }
+          }
+          cameraHideState();
+          cameraToggle(cameraShoot, true);
+        })
+        .catch(function (error) {
+          if (session !== cameraSession) return;
+          var name = error && error.name ? error.name : "";
+          if (name === "NotAllowedError" || name === "SecurityError") {
+            cameraShowError(
+              "Izin kamera ditolak. Izinkan akses kamera pada browser, lalu coba lagi."
+            );
+          } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+            cameraShowError(
+              "Kamera tidak ditemukan. Pastikan perangkat memiliki kamera yang aktif."
+            );
+          } else if (name === "NotReadableError") {
+            cameraShowError(
+              "Kamera sedang dipakai aplikasi lain. Tutup aplikasi tersebut lalu coba lagi."
+            );
+          } else {
+            cameraShowError(
+              "Kamera tidak bisa dibuka. Periksa izin browser, lalu coba lagi."
+            );
+          }
+        });
+    }
+
+    function cameraCapture() {
+      if (!cameraVideo || !cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+        cameraSetStatus("Kamera belum siap. Tunggu sebentar lalu coba lagi.");
+        return;
+      }
+
+      var canvas = document.createElement("canvas");
+      canvas.width = cameraVideo.videoWidth;
+      canvas.height = cameraVideo.videoHeight;
+      var context = canvas.getContext("2d");
+      if (!context) {
+        cameraSetStatus("Browser tidak mendukung pengambilan foto. Gunakan pilih file.");
+        return;
+      }
+      context.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+
+      var session = cameraSession;
+      canvas.toBlob(
+        function (blob) {
+          if (session !== cameraSession || !cameraModalEl.classList.contains("show")) {
+            return;
+          }
+          if (!blob) {
+            cameraSetStatus("Foto gagal diambil. Coba lagi.");
+            return;
+          }
+          cameraFile = new File([blob], "kamera-" + Date.now() + ".jpg", {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          });
+          cameraPhotoUrl = URL.createObjectURL(cameraFile);
+          if (cameraPhoto) {
+            cameraPhoto.src = cameraPhotoUrl;
+            cameraPhoto.hidden = false;
+          }
+          if (cameraVideo) cameraVideo.hidden = true;
+          if (cameraStage) cameraStage.classList.add("is-captured");
+          cameraStopStream();
+          cameraHideState();
+          cameraToggle(cameraShoot, false);
+          cameraToggle(cameraRetake, true);
+          cameraToggle(cameraUse, true);
+          cameraSetStatus(
+            "Foto siap. Periksa apakah seluruh lembar terlihat jelas, lalu pilih Gunakan Foto."
+          );
+        },
+        "image/jpeg",
+        0.92
+      );
+    }
+
+    function cameraUsePhoto() {
+      if (!cameraFile) return;
+      var file = cameraFile;
+      var trigger = cameraTrigger;
+      cameraModal.hide();
+      document.dispatchEvent(
+        new CustomEvent("camera:captured", {
+          detail: { file: file, trigger: trigger },
+        })
+      );
+    }
+
+    document.querySelectorAll("[data-camera-open]").forEach(function (trigger) {
+      trigger.addEventListener("click", function () {
+        cameraFallbackSelector = trigger.getAttribute("data-camera-fallback") || null;
+        cameraTrigger = trigger;
+
+        if (!cameraCanUseLive() && cameraFallbackSelector) {
+          var input = document.querySelector(cameraFallbackSelector);
+          if (input) {
+            input.click();
+            return;
+          }
+        }
+
+        cameraModal.show();
+        cameraStartStream();
+      });
+    });
+
+    if (cameraShoot) cameraShoot.addEventListener("click", cameraCapture);
+    if (cameraRetake) {
+      cameraRetake.addEventListener("click", function () {
+        cameraStartStream();
+      });
+    }
+    if (cameraUse) cameraUse.addEventListener("click", cameraUsePhoto);
+    if (cameraFallbackBtn) {
+      cameraFallbackBtn.addEventListener("click", function () {
+        var input = cameraFallbackSelector
+          ? document.querySelector(cameraFallbackSelector)
+          : null;
+        if (input) input.click();
+        cameraModal.hide();
+      });
+    }
+
+    cameraModalEl.addEventListener("hidden.bs.modal", function () {
+      cameraSession += 1;
+      cameraStopStream();
+      cameraReleasePhoto();
+      cameraHideState();
+      if (cameraStage) cameraStage.classList.remove("is-captured");
+      if (cameraVideo) cameraVideo.hidden = false;
+      cameraResetButtons();
+      cameraSetStatus(cameraDefaultStatus);
+      cameraTrigger = null;
+      cameraFallbackSelector = null;
+    });
+  }
 })();

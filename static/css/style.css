@@ -1104,6 +1104,108 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ---------- Kamera langsung (ambil foto) ---------- */
+.camera-modal .modal-content {
+  overflow: hidden;
+}
+
+.camera-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: min(62vh, 540px);
+  overflow: hidden;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% 40%, #2a1d45 0%, #150d26 60%, #0b0713 100%);
+}
+
+.camera-stage::before {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  z-index: 2;
+  border: 2px dashed rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.camera-stage.is-captured::before {
+  opacity: 0;
+}
+
+.camera-stage video,
+.camera-stage img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.camera-stage video {
+  object-fit: contain;
+}
+
+.camera-stage img {
+  object-fit: contain;
+  background: #0b0713;
+}
+
+.camera-state {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.25rem;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: #ffffff;
+  background: rgba(18, 11, 31, 0.78);
+  backdrop-filter: blur(2px);
+}
+
+.camera-state.is-error {
+  background: rgba(18, 11, 31, 0.92);
+}
+
+.camera-state.is-error .spinner-border {
+  display: none;
+}
+
+.camera-state.is-error [data-camera-state-text] {
+  max-width: 32rem;
+  line-height: 1.5;
+}
+
+.camera-status {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.camera-modal .modal-footer {
+  justify-content: flex-end;
+}
+
+@media (max-width: 576px) {
+  .camera-stage {
+    aspect-ratio: 1 / 1;
+    max-height: none;
+  }
+
+  .camera-status {
+    font-size: 0.76rem;
+  }
+}
+
 .debug-gallery {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

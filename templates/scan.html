@@ -67,7 +67,7 @@
             <p class="text-muted small mb-3">PNG, JPG, JPEG, WEBP, BMP &middot; bisa lebih dari satu lembar sekaligus</p>
             <div class="d-flex justify-content-center gap-2 flex-wrap">
               <button type="button" class="btn btn-primary" id="browseBtn"><i class="bi bi-folder2-open me-1"></i>Pilih File</button>
-              <button type="button" class="btn btn-outline-primary" id="cameraBtn"><i class="bi bi-camera me-1"></i>Ambil Foto</button>
+              <button type="button" class="btn btn-outline-primary" id="cameraBtn" data-camera-open data-camera-fallback="#cameraCapture"><i class="bi bi-camera me-1"></i>Ambil Foto</button>
             </div>
           </div>
           <input class="d-none" type="file" id="scanFiles" name="photos" accept="image/*" multiple>
@@ -187,7 +187,6 @@
   const mainInput = document.getElementById("scanFiles");
   const cameraInput = document.getElementById("cameraCapture");
   const browseBtn = document.getElementById("browseBtn");
-  const cameraBtn = document.getElementById("cameraBtn");
   const dropZone = document.getElementById("dropZone");
   const fileList = document.getElementById("fileList");
   const fileCountBadge = document.getElementById("fileCountBadge");
@@ -265,7 +264,6 @@
 
   if (mainInput) {
     browseBtn.addEventListener("click", function () { mainInput.click(); });
-    cameraBtn.addEventListener("click", function () { cameraInput.click(); });
     mainInput.addEventListener("change", function () {
       addFiles(mainInput.files);
       mainInput.value = "";
@@ -273,6 +271,11 @@
     cameraInput.addEventListener("change", function () {
       addFiles(cameraInput.files);
       cameraInput.value = "";
+    });
+    document.addEventListener("camera:captured", function (event) {
+      if (event.detail && event.detail.file) {
+        addFiles([event.detail.file]);
+      }
     });
     ["dragenter", "dragover"].forEach(function (eventName) {
       dropZone.addEventListener(eventName, function (e) {

@@ -23,10 +23,34 @@
         <div class="card-body">
           <div class="mb-3">
             <label class="form-label fw-semibold">Gambar lembar jawaban kosong</label>
-            <input class="form-control" type="file" name="image" accept="image/*" {% if not tmp_ref %}required{% endif %}>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <button type="button" class="btn btn-primary" id="templateCameraBtn" data-camera-open data-camera-fallback="#templateCapture">
+                <i class="bi bi-camera me-1"></i>Ambil Foto
+              </button>
+              <button type="button" class="btn btn-outline-primary" id="templateBrowseBtn">
+                <i class="bi bi-folder2-open me-1"></i>Pilih File
+              </button>
+            </div>
+            <input class="d-none" type="file" id="templateImage" name="image" accept="image/*">
+            <input class="d-none" type="file" id="templateCapture" accept="image/*" capture="environment">
             <div class="form-text">
               Foto seluruh lembar dengan 4 sudut terlihat. Untuk hasil terbaik, gunakan lembar contoh yang memiliki marker sudut.
-              {% if tmp_ref %}<span class="text-success">Gambar sudah diunggah; unggah file baru hanya jika ingin menggantinya.</span>{% endif %}
+              {% if tmp_ref %}<span class="text-success">Gambar sudah diunggah; ambil foto atau pilih file baru hanya jika ingin menggantinya.</span>{% endif %}
+            </div>
+            <div class="alert alert-danger py-2 mt-2 mb-0 d-none" id="templateImageError" role="alert">
+              <i class="bi bi-exclamation-circle me-1"></i>Ambil foto atau pilih file gambar template terlebih dahulu.
+            </div>
+            <div class="file-row mt-3" id="templateFileBox" hidden>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="bi bi-image text-primary"></i>
+                <span class="text-truncate fw-semibold" id="templateFileName"></span>
+                <button type="button" class="btn btn-sm btn-outline-danger ms-auto" id="templateFileRemove" aria-label="Hapus gambar yang dipilih">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+              <div class="image-frame">
+                <img src="" alt="Pratinjau gambar template" id="templateImagePreview" data-zoomable>
+              </div>
             </div>
           </div>
           <div class="mb-3">
@@ -164,4 +188,119 @@
   </div>
   {% endif %}
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+
+  var form = document.getElementById("templateForm");
+  var imageInput = document.getElementById("templateImage");
+  var captureInput = document.getElementById("templateCapture");
+  if (!form || !imageInput || !captureInput) return;
+
+  var browseBtn = document.getElementById("templateBrowseBtn");
+  var cameraBtn = document.getElementById("templateCameraBtn");
+  var fileBox = document.getElementById("templateFileBox");
+  var fileName = document.getElementById("templateFileName");
+  var preview = document.getElementById("templateImagePreview");
+  var removeBtn = document.getElementById("templateFileRemove");
+  var errorBox = document.getElementById("templateImageError");
+  var hasExisting = {{ 'true' if tmp_ref else 'false' }};
+  var previewUrl = null;
+
+  function assignFile(file) {
+    try {
+      var transfer = new DataTransfer();
+      transfer.items.add(file);
+      imageInput.files = transfer.files;
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function clearPreview() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      previewUrl = null;
+    }
+    if (preview) preview.removeAttribute("src");
+    if (fileBox) fileBox.hidden = true;
+    if (fileName) fileName.textContent = "";
+  }
+
+  function showPreview(file) {
+    if (!preview || !fileBox) return;
+    clearPreview();
+    previewUrl = URL.createObjectURL(file);
+    preview.src = previewUrl;
+    if (fileName) fileName.textContent = file.name;
+    fileBox.hidden = false;
+    if (errorBox) errorBox.classList.add("d-none");
+  }
+
+  function useFile(file) {
+    if (!file) return;
+    if (file.type && file.type.indexOf("image/") !== 0) return;
+    if (!assignFile(file)) {
+      if (errorBox) {
+        errorBox.textContent =
+          "Browser ini tidak bisa memakai foto kamera langsung. Silakan pilih file gambar.";
+        errorBox.classList.remove("d-none");
+      }
+      return;
+    }
+    showPreview(file);
+  }
+
+  if (browseBtn) {
+    browseBtn.addEventListener("click", function () {
+      imageInput.click();
+    });
+  }
+
+  imageInput.addEventListener("change", function () {
+    var file = imageInput.files && imageInput.files[0];
+    if (file) {
+      showPreview(file);
+    } else {
+      clearPreview();
+    }
+  });
+
+  captureInput.addEventListener("change", function () {
+    var file = captureInput.files && captureInput.files[0];
+    if (file) useFile(file);
+    captureInput.value = "";
+  });
+
+  document.addEventListener("camera:captured", function (event) {
+    if (event.detail && event.detail.file) {
+      useFile(event.detail.file);
+    }
+  });
+
+  if (removeBtn) {
+    removeBtn.addEventListener("click", function () {
+      imageInput.value = "";
+      clearPreview();
+      if (cameraBtn) cameraBtn.focus();
+    });
+  }
+
+  form.addEventListener("submit", function (event) {
+    if (!imageInput.files.length && !hasExisting) {
+      event.preventDefault();
+      if (errorBox) {
+        errorBox.innerHTML =
+          '<i class="bi bi-exclamation-circle me-1"></i>Ambil foto atau pilih file gambar template terlebih dahulu.';
+        errorBox.classList.remove("d-none");
+      }
+      if (cameraBtn) cameraBtn.focus();
+    }
+  });
+})();
+</script>
 {% endblock %}

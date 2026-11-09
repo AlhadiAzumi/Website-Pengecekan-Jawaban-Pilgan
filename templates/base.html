@@ -151,6 +151,45 @@
   </div>
 </div>
 
+<div class="modal fade camera-modal" id="cameraModal" tabindex="-1" aria-labelledby="cameraModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="cameraModalTitle"><i class="bi bi-camera me-1"></i>Ambil Foto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body">
+        <div class="camera-stage" data-camera-stage>
+          <video data-camera-video autoplay playsinline muted></video>
+          <img data-camera-photo alt="Hasil foto kamera" hidden>
+          <div class="camera-state" data-camera-state>
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span data-camera-state-text>Menyiapkan kamera...</span>
+          </div>
+        </div>
+        <p class="camera-status" data-camera-status aria-live="polite">
+          Posisikan seluruh lembar di dalam bingkai. Pastikan cahaya cukup dan kamera tidak goyang.
+        </p>
+      </div>
+      <div class="modal-footer flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary me-auto" data-bs-dismiss="modal">Tutup</button>
+        <button type="button" class="btn btn-outline-secondary" data-camera-fallback hidden>
+          <i class="bi bi-phone me-1"></i>Kamera perangkat
+        </button>
+        <button type="button" class="btn btn-outline-secondary" data-camera-retake hidden>
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Foto Ulang
+        </button>
+        <button type="button" class="btn btn-primary" data-camera-shoot>
+          <i class="bi bi-camera-fill me-1"></i>Ambil Foto
+        </button>
+        <button type="button" class="btn btn-success" data-camera-use hidden>
+          <i class="bi bi-check2 me-1"></i>Gunakan Foto
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js', v=asset_version) }}"></script>
