@@ -7,7 +7,7 @@
   <link href="{{ url_for('static', filename='vendor/fonts/poppins.css') }}" rel="stylesheet">
   <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
   <link href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/style.css', v=asset_version) }}" rel="stylesheet">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -42,13 +42,27 @@
     </nav>
 
     <main class="app-main">
+      {% set flash_meta = {
+        'success': {'title': 'Berhasil', 'icon': 'bi-check-circle-fill'},
+        'danger': {'title': 'Gagal', 'icon': 'bi-x-octagon-fill'},
+        'warning': {'title': 'Perhatian', 'icon': 'bi-exclamation-triangle-fill'},
+        'info': {'title': 'Informasi', 'icon': 'bi-info-circle-fill'}
+      } %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <div class="flash-stack">
+          <div class="flash-stack" aria-live="polite" aria-atomic="false">
             {% for category, message in messages %}
-              <div class="alert alert-{{ category if category in ['success','danger','warning','info'] else 'info' }} alert-dismissible fade show shadow-sm" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+              {% set kind = category if category in flash_meta else 'info' %}
+              <div class="flash-toast flash-{{ kind }}" data-flash role="{{ 'alert' if kind in ['danger', 'warning'] else 'status' }}">
+                <span class="flash-icon" aria-hidden="true"><i class="bi {{ flash_meta[kind]['icon'] }}"></i></span>
+                <div class="flash-body">
+                  <div class="flash-title">{{ flash_meta[kind]['title'] }}</div>
+                  <p class="flash-message">{{ message }}</p>
+                </div>
+                <button type="button" class="flash-close" data-flash-close aria-label="Tutup notifikasi">
+                  <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+                <span class="flash-progress" aria-hidden="true"></span>
               </div>
             {% endfor %}
           </div>
@@ -68,9 +82,25 @@
   </div>
 </div>
 
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content confirm-modal">
+      <div class="modal-body pb-0">
+        <div class="confirm-icon" aria-hidden="true"><i class="bi bi-exclamation-triangle-fill"></i></div>
+        <h2 class="modal-title h5" id="confirmModalTitle">Hapus data ini?</h2>
+        <p class="confirm-message"></p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center pt-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-danger" data-confirm-ok><i class="bi bi-trash me-1"></i>Ya, hapus</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js', v=asset_version) }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

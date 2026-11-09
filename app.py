@@ -211,10 +211,23 @@ def create_app():
 
     @app.context_processor
     def inject_globals():
+        def asset_version(*paths):
+            latest = 0
+            for path in paths:
+                try:
+                    latest = max(
+                        latest,
+                        os.path.getmtime(os.path.join(app.static_folder, path)),
+                    )
+                except OSError:
+                    continue
+            return str(int(latest))
+
         return {
             "app_title": APP_TITLE,
             "settings": get_settings(),
             "current_year": datetime.now().year,
+            "asset_version": asset_version("css/style.css", "js/app.js"),
         }
 
     @app.route("/")

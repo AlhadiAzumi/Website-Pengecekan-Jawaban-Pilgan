@@ -76,7 +76,7 @@
           <div class="col-6">Luas max: <strong>{{ template.detect_params.max_area }}</strong></div>
         </div>
         <hr>
-        <form method="post" action="{{ url_for('template_delete', template_id=template.id) }}" onsubmit="return confirm('Hapus templat ini?');">
+        <form method="post" action="{{ url_for('template_delete', template_id=template.id) }}" data-confirm="Hapus templat ini? Semua kunci dan hasil yang memakainya juga akan terhapus.">
           <button class="btn btn-sm btn-outline-danger" type="submit" {{ 'disabled' if template.scans }}><i class="bi bi-trash me-1"></i>Hapus Templat</button>
           {% if template.scans %}<span class="text-muted-sm ms-1">Tidak bisa dihapus, sudah ada {{ template.scans|length }} hasil scan.</span>{% endif %}
         </form>

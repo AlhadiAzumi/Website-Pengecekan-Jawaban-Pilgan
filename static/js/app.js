@@ -2,6 +2,12 @@
 (function () {
   "use strict";
 
+  var confirmModalEl = document.getElementById("confirmModal");
+  var confirmModal = confirmModalEl ? bootstrap.Modal.getOrCreateInstance(confirmModalEl) : null;
+  var confirmMessage = confirmModalEl ? confirmModalEl.querySelector(".confirm-message") : null;
+  var confirmOk = confirmModalEl ? confirmModalEl.querySelector("[data-confirm-ok]") : null;
+  var pendingForm = null;
+
   function updateRangeOutput(input) {
     var target = document.querySelector(input.dataset.output);
     if (!target) return;
@@ -58,11 +64,68 @@
     });
   });
 
-  document.querySelectorAll("[data-confirm]").forEach(function (el) {
-    el.addEventListener("click", function (event) {
-      if (!window.confirm(el.dataset.confirm)) {
+  if (confirmModal && confirmMessage && confirmOk) {
+    document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        if (form.dataset.confirmed === "1") return;
         event.preventDefault();
+        pendingForm = form;
+        confirmMessage.textContent = form.dataset.confirm || "Lanjutkan tindakan ini?";
+        confirmModal.show();
+      });
+    });
+
+    confirmOk.addEventListener("click", function () {
+      if (!pendingForm) return;
+      var form = pendingForm;
+      pendingForm = null;
+      form.dataset.confirmed = "1";
+      confirmModal.hide();
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
       }
+    });
+
+    confirmModalEl.addEventListener("hidden.bs.modal", function () {
+      pendingForm = null;
+    });
+  } else {
+    // Fallback bila modal tidak tersedia (mis. halaman kustom).
+    document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        if (!window.confirm(form.dataset.confirm || "Lanjutkan tindakan ini?")) {
+          event.preventDefault();
+        }
+      });
+    });
+  }
+
+  document.querySelectorAll("[data-flash]").forEach(function (toast) {
+    var dismissed = false;
+
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      toast.classList.add("is-leaving");
+      window.setTimeout(function () {
+        toast.remove();
+      }, 260);
+    }
+
+    var close = toast.querySelector("[data-flash-close]");
+    if (close) close.addEventListener("click", dismiss);
+
+    var progress = toast.querySelector(".flash-progress");
+    if (progress) {
+      progress.addEventListener("animationend", function (event) {
+        if (event.animationName === "flash-progress") dismiss();
+      });
+    }
+
+    toast.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") dismiss();
     });
   });
 
