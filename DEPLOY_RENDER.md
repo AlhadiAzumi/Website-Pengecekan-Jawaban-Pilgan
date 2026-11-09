@@ -11,7 +11,8 @@ Panduan ini menjelaskan cara menjalankan aplikasi di [Render](https://render.com
 | `Dockerfile` | Image produksi: Python 3.12, OpenCV headless, Gunicorn |
 | `gunicorn.conf.py` | Jumlah worker/thread, port, timeout |
 | `requirements-prod.txt` | Dependency produksi (tanpa paket GUI OpenCV) |
-| `render.yaml` | Blueprint Render: service, disk, env var, health check |
+| `render.yaml` | Blueprint Render berbayar: service + persistent disk + env var |
+| `render-free.yaml` | Blueprint Render gratis: tanpa disk, data sementara |
 | `Procfile` | Alternatif start command jika tidak memakai Docker |
 | `.dockerignore` | Agar data lokal tidak ikut ke dalam image |
 | `.gitignore` | Agar database, upload, dan `.env` tidak ikut ke Git |
@@ -23,7 +24,7 @@ Panduan ini menjelaskan cara menjalankan aplikasi di [Render](https://render.com
 
 1. Pastikan project sudah di-push ke **GitHub / GitLab / Bitbucket**.
 2. Jangan commit `instance/`, `uploads/`, `hasil/`, atau `.env`. File-file itu sudah dikecualikan oleh `.gitignore`.
-3. Siapkan akun Render dan metode pembayaran. **Persistent disk hanya tersedia di instance berbayar** (blueprint memakai `plan: starter`).
+3. Siapkan akun Render. Kalau tidak mau memasukkan kartu/rekening, gunakan **`render-free.yaml`** (tanpa persistent disk). Kalau butuh data permanen, gunakan **`render.yaml`** yang memakai paket berbayar + disk.
 
 ```bash
 git add .
@@ -39,15 +40,18 @@ git push
 
 1. Buka **Render Dashboard → New → Blueprint**.
 2. Hubungkan repository aplikasi.
-3. Render akan membaca `render.yaml`. Periksa nama service `pilgan-checker`, region `singapore`, dan disk `pilgan-data`.
-4. Saat diminta, isi **`APP_PASSWORD`** dengan password kuat. Nilai ini tidak disimpan di repo (`sync: false`).
-5. Klik **Apply / Create**.
-6. Tunggu build Docker selesai dan health check `/healthz` lulus.
-7. Buka URL `https://<nama-service>.onrender.com`, lalu login dengan:
+3. Pilih file Blueprint:
+   - **`render-free.yaml`** → gratis, tanpa kartu, data sementara.
+   - **`render.yaml`** → berbayar, memakai persistent disk 1 GB.
+4. Periksa nama service `pilgan-checker` dan region `singapore`.
+5. Saat diminta, isi **`APP_PASSWORD`** dengan password kuat. Nilai ini tidak disimpan di repo (`sync: false`).
+6. Klik **Apply / Create**.
+7. Tunggu build Docker selesai dan health check `/healthz` lulus.
+8. Buka URL `https://<nama-service>.onrender.com`, lalu login dengan:
    - Username: `admin`
-   - Password: yang kamu isi pada langkah 4
+   - Password: yang kamu isi pada langkah 5
 
-Setiap push ke branch utama akan otomatis deploy ulang (`autoDeploy: true`).
+Setiap push ke branch utama akan otomatis deploy ulang (`autoDeployTrigger: commit`).
 
 ---
 
@@ -56,12 +60,12 @@ Setiap push ke branch utama akan otomatis deploy ulang (`autoDeploy: true`).
 | Variable | Wajib | Default | Keterangan |
 |---|---|---|---|
 | `SECRET_KEY` | Ya (produksi) | dibuat otomatis oleh Render | Kunci session Flask. Ganti = semua session lama tidak berlaku |
-| `PILGAN_DATA_DIR` | Ya di Render | folder project | Di blueprint: `/var/data` (lokasi persistent disk) |
-| `APP_USERNAME` | Tidak | `admin` (dari blueprint) | Basic auth aktif jika username **dan** password diisi |
+| `PILGAN_DATA_DIR` | Ya di Render | tergantung blueprint | `render.yaml`: `/var/data` (disk). `render-free.yaml`: `/tmp/pilgan-data` (sementara) |
+| `APP_USERNAME` | Tidak | `admin` | Basic auth aktif jika username **dan** password diisi |
 | `APP_PASSWORD` | Tidak | kosong | Isi saat membuat Blueprint. Jangan taruh di repo |
 | `DATABASE_URL` | Tidak | SQLite di `PILGAN_DATA_DIR` | Isi jika memakai PostgreSQL |
 | `WEB_CONCURRENCY` | Tidak | `1` | Jumlah worker Gunicorn |
-| `WEB_THREADS` | Tidak | `4` | Thread per worker |
+| `WEB_THREADS` | Tidak | `4` (berbayar) / `2` (gratis) | Thread per worker |
 | `GUNICORN_TIMEOUT` | Tidak | `300` | Detik; scan batch besar butuh waktu |
 | `PORT` | Otomatis | diisi Render | Jangan diubah manual |
 
@@ -69,22 +73,32 @@ Setiap push ke branch utama akan otomatis deploy ulang (`autoDeploy: true`).
 
 ---
 
-## 5. Persistent disk & paket gratis
+## 5. Paket gratis vs berbayar
 
-Blueprint memasang disk 1 GB di `/var/data`:
+### Gratis — `render-free.yaml`
+
+- CPU **0.1** / RAM **512 MB**.
+- **Tidak ada persistent disk.** Data ditulis ke `/tmp/pilgan-data` dan **hilang** setiap restart, redeploy, atau spin-down.
+- Service **spin-down setelah 15 menit** tanpa traffic. Request berikutnya butuh sekitar **1 menit** untuk bangun.
+- Kuota **750 jam instance per bulan**.
+- Tidak ada Shell akses.
+- Cocok untuk **demo/presentasi**, bukan data permanen. Scan bisa lambat; pecah batch kecil-kecil.
+
+### Berbayar — `render.yaml`
+
+- Plan `0.5c-512mb` (0.5 CPU / 512 MB) + **persistent disk 1 GB** di `/var/data`.
+- Data tetap ada saat redeploy/restart:
 
 ```text
 /var/data/instance/pilgan.db   -> database SQLite
 /var/data/uploads/             -> foto templat, scan, gambar debug
 ```
 
-Hal penting:
-
-- **Paket gratis Render tidak mendukung persistent disk.** File akan hilang saat service restart, redeploy, atau spin-down. Jangan pakai paket gratis untuk data sungguhan.
+- Tambah disk akan **menonaktifkan zero-downtime deploy**: service berhenti sebentar saat redeploy.
 - Satu disk hanya bisa dipasang ke **satu service**. Jangan menaikkan jumlah instance; disk tidak bisa dipakai bersama.
-- Isi disk **tidak di-backup otomatis** oleh Render. Lakukan backup berkala (lihat bagian 9).
+- Kalau sering kehabisan memori saat scan batch, naikkan plan ke `1c-2g` (1 CPU / 2 GB).
+- Render membuat **snapshot disk otomatis setiap 24 jam** dan menyimpannya **7 hari**. Restore dilakukan dari halaman **Disk** service. Tetap lakukan backup sendiri untuk jangka panjang (lihat bagian 9).
 - Jika kapasitas 1 GB terasa sempit, perbesar `sizeGB` di `render.yaml` atau hapus scan lama lewat aplikasi.
-- Upgrade paket RAM jika sering kehabisan memori saat scan banyak lembar. Paket Starter (512 MB) cukup untuk pemakaian kecil, tetapi OpenCV bisa berat.
 
 ---
 
@@ -106,7 +120,7 @@ Keterbatasan: penulisan bersamaan terbatas. Karena itu Gunicorn diset `WEB_CONCU
 
 Gunakan jika pemakaian bersamaan tinggi atau butuh skalabilitas.
 
-1. Di Render: **New → PostgreSQL** (pilih paket berbayar untuk data jangka panjang; paket gratis punya masa berlaku terbatas).
+1. Di Render: **New → PostgreSQL** (pilih paket berbayar untuk data jangka panjang). Paket gratis hanya **1 GB**, **kedaluwarsa 30 hari** setelah dibuat, dan **tanpa backup**.
 2. Setelah database siap, salin **Internal Database URL**.
 3. Buka service web → **Environment** → tambahkan:
    ```env
@@ -146,7 +160,7 @@ Buat templat, isi paket kunci, lalu scan ulang di aplikasi Render. Paling sederh
 
 ### Cara cepat — salin database + upload
 
-Hanya lakukan saat tidak ada yang memakai aplikasi.
+Hanya lakukan saat tidak ada yang memakai aplikasi. Cara ini membutuhkan **Render Shell**, yang tidak tersedia di paket gratis.
 
 1. Di lokal, buat arsip:
    ```powershell
@@ -172,7 +186,7 @@ Hanya lakukan saat tidak ada yang memakai aplikasi.
 
 ## 9. Operasional & backup
 
-- **Backup**: unduh `instance/pilgan.db` dan folder `uploads/` secara berkala. Jangan hanya mengandalkan disk Render.
+- **Backup**: Render menyediakan snapshot disk otomatis harian (disimpan 7 hari), tetapi tetap unduh `instance/pilgan.db` dan folder `uploads/` secara berkala. Jangan hanya mengandalkan snapshot.
 - **Log**: pantau **Logs** di dashboard Render saat deploy atau saat scan gagal.
 - **Ukuran data**: foto scan dan gambar debug paling cepat menghabiskan disk. Bersihkan hasil lama jika perlu.
 - **Batas upload**: request maksimal **32 MB** dan maksimal **50 file** per batch. Untuk foto ponsel, 10–20 lembar per batch lebih realistis.
@@ -189,7 +203,9 @@ Hanya lakukan saat tidak ada yang memakai aplikasi.
 | Health check gagal | App crash saat start, DB tidak bisa ditulis, atau `DATABASE_URL` salah | Buka Logs; cek `/var/data` dan koneksi database |
 | 502 / request timeout | Scan terlalu banyak/berat, RAM habis | Kecilkan batch, naikkan paket, cek timeout |
 | 401 terus | Password salah atau `APP_PASSWORD` tidak diset | Perbaiki env var, restart, hapus cache login browser |
-| Data hilang setelah redeploy | Memakai paket gratis / disk tidak terpasang | Gunakan paket berbayar + disk `/var/data` |
+| Data hilang setelah redeploy | Memakai paket gratis / disk tidak terpasang | Gunakan `render.yaml` (berbayar + disk `/var/data`), atau terima bahwa data demo hilang |
+| Scan sangat lambat / timeout di paket gratis | CPU hanya 0.1 dan RAM 512 MB | Kecilkan batch, scan satu per satu, atau upgrade paket |
+| Service tiba-tiba “tidur” | Free tier spin-down setelah 15 menit idle | Wajar; request berikutnya menunggu ±1 menit |
 | `database is locked` | Banyak worker/instance menulis SQLite | Pertahankan `WEB_CONCURRENCY=1`, jangan multi-instance |
 | Gambar scan hilang tetapi nilai ada | `uploads/` tidak berada di disk persistent | Set `PILGAN_DATA_DIR=/var/data` |
 | Halaman publik tanpa login | `APP_PASSWORD` kosong | Isi username + password, redeploy |
@@ -227,4 +243,6 @@ Jika ingin build lebih cepat dan tidak memakai Docker:
    ```
 4. Tetap tambahkan persistent disk di `/var/data` dan set `PILGAN_DATA_DIR=/var/data`.
 
-`Procfile` sudah berisi start command yang sama. Namun `render.yaml` saat ini memakai Docker agar versi OpenCV dan library sistem konsisten.
+`Procfile` sudah berisi start command yang sama. Namun `render.yaml` dan `render-free.yaml` memakai Docker agar versi OpenCV dan library sistem konsisten.
+
+Untuk versi gratis tanpa kartu, tetap gunakan `render-free.yaml`; jangan tambahkan disk ke service free karena fitur itu tidak didukung.

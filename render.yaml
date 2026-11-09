@@ -2,10 +2,10 @@ services:
   - type: web
     name: pilgan-checker
     runtime: docker
-    plan: starter
+    plan: 0.5c-512mb
     region: singapore
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: PILGAN_DATA_DIR
         value: /var/data
