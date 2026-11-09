@@ -17,8 +17,6 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-<div class="page-orb page-orb-a"></div>
-<div class="page-orb page-orb-b"></div>
 
 <div class="container app-container">
   <div class="app-shell">
@@ -90,9 +88,8 @@
     {% if not auth_page %}
     <footer class="app-footer">
       <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
-        <span>Pengolahan Citra Digital &middot; {{ current_year }}</span>
-        <span class="footer-dots"><span></span><span></span><span></span></span>
-        <span>Thresholding &amp; Analisis Area Piksel</span>
+        <span>Pilgan Checker &middot; Pengolahan Citra Digital</span>
+        <span>&copy; {{ current_year }}</span>
       </div>
     </footer>
     {% endif %}
