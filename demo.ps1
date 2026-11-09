@@ -136,12 +136,9 @@ if ($Lan) {
     }
 }
 
-if ($env:APP_USERNAME -and $env:APP_PASSWORD) {
-    Write-Host "  Login  : basic auth aktif ($env:APP_USERNAME)" -ForegroundColor Yellow
-}
-elseif ($Lan) {
-    Write-Host "  Login  : TIDAK aktif - siapa pun di Wi-Fi yang sama bisa membuka app." -ForegroundColor Yellow
-    Write-Host "           Set APP_USERNAME dan APP_PASSWORD untuk mengaktifkan login." -ForegroundColor DarkGray
+Write-Host "  Login  : aktif - buat akun admin saat halaman pertama kali dibuka." -ForegroundColor Yellow
+if ($Lan) {
+    Write-Host "           Siapa pun di Wi-Fi yang sama akan diminta login." -ForegroundColor DarkGray
 }
 
 Write-Host "  Stop   : Ctrl+C" -ForegroundColor DarkGray

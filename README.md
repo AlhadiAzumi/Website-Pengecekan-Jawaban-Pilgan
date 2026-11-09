@@ -97,7 +97,7 @@ Nilai = benar / 50 x 100.
 
 ## 9. Deploy ke Render
 
-Konfigurasi produksi sudah disiapkan: Docker, Gunicorn, persistent disk, health check, dan basic auth opsional.
+Konfigurasi produksi sudah disiapkan: Docker, Gunicorn, persistent disk, health check, dan login aplikasi.
 
 Panduan lengkap ada di [`DEPLOY_RENDER.md`](DEPLOY_RENDER.md). Ringkasnya:
 
@@ -106,8 +106,7 @@ Panduan lengkap ada di [`DEPLOY_RENDER.md`](DEPLOY_RENDER.md). Ringkasnya:
 3. Pilih blueprint:
    - `render-free.yaml` → gratis, tanpa kartu, data sementara (cocok demo).
    - `render.yaml` → berbayar, data permanen dengan persistent disk.
-4. Isi `APP_PASSWORD` saat diminta, lalu Apply.
-5. Buka URL service dan login dengan username `admin`.
+4. Buka URL service, lalu buat akun admin saat halaman pertama kali dibuka.
 
 Catatan penting: persistent disk hanya tersedia di paket berbayar. Pada paket gratis, database dan file upload akan hilang saat restart/redeploy/spin-down. SQLite sudah cukup untuk skala kecil; isi `DATABASE_URL` jika ingin memakai PostgreSQL.
 
@@ -158,13 +157,11 @@ Jika HP tidak bisa membuka alamatnya:
   .\demo.ps1 -Lan -OpenFirewall
   ```
 
-Mode LAN membuka aplikasi ke seluruh jaringan. Sebaiknya aktifkan login sebelum presentasi:
+Mode LAN membuka aplikasi ke seluruh jaringan. Login aktif otomatis: saat halaman pertama kali dibuka, buat akun admin (username + password minimal 6 karakter). Setelah itu semua halaman, termasuk dari HP, meminta login.
 
-```powershell
-$env:APP_USERNAME = "admin"
-$env:APP_PASSWORD = "ganti-password"
-.\demo.ps1 -Lan
-```
+- Ganti username/password kapan saja di menu **Debug → Akun & Keamanan**.
+- Lupa password: hapus baris `auth_username` dan `auth_password_hash` dari tabel `app_settings` di `instance/pilgan.db`, lalu buat akun baru.
+- Tombol **Keluar** ada di kanan atas.
 
 Data demo tetap tersimpan di `instance/pilgan.db` dan `uploads/`. Backup keduanya sebelum presentasi:
 

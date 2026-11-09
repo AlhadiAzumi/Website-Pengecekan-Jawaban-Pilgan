@@ -22,6 +22,21 @@
     });
   });
 
+  document.querySelectorAll("[data-password-toggle]").forEach(function (button) {
+    var input = document.querySelector(button.dataset.passwordToggle);
+    if (!input) return;
+    button.addEventListener("click", function () {
+      var show = input.type === "password";
+      input.type = show ? "text" : "password";
+      button.setAttribute("aria-label", show ? "Sembunyikan password" : "Tampilkan password");
+      var icon = button.querySelector("i");
+      if (icon) {
+        icon.classList.toggle("bi-eye", !show);
+        icon.classList.toggle("bi-eye-slash", show);
+      }
+    });
+  });
+
   document.querySelectorAll("[data-table-filter]").forEach(function (input) {
     var table = document.querySelector(input.dataset.tableFilter);
     if (!table) return;

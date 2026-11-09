@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Buat Akun' if setup else 'Masuk' }} &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="auth-logo"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
+      <div>
+        <span class="auth-eyebrow">Pilgan Checker</span>
+        <h1>{{ 'Buat Akun Admin' if setup else 'Selamat Datang Kembali' }}</h1>
+      </div>
+    </div>
+
+    {% if setup %}
+    <p class="auth-lead">
+      Belum ada akun di perangkat ini. Buat akun admin pertama untuk mengunci
+      akses aplikasi sebelum demo dimulai.
+    </p>
+    <div class="auth-note">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      <span>Akun disimpan aman di database lokal. Tidak perlu koneksi internet.</span>
+    </div>
+    {% else %}
+    <p class="auth-lead">
+      Masuk untuk membuka dashboard pemeriksaan lembar jawaban.
+    </p>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('login') }}" class="auth-form">
+      <input type="hidden" name="next" value="{{ next_url }}">
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="authUsername">Username</label>
+        <div class="input-group auth-input">
+          <span class="input-group-text"><i class="bi bi-person" aria-hidden="true"></i></span>
+          <input class="form-control" id="authUsername" name="username" type="text"
+                 value="{{ form_username }}" placeholder="Contoh: admin"
+                 autocomplete="username" autocapitalize="none" spellcheck="false"
+                 minlength="3" maxlength="40" required autofocus>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="authPassword">Password</label>
+        <div class="input-group auth-input">
+          <span class="input-group-text"><i class="bi bi-key" aria-hidden="true"></i></span>
+          <input class="form-control" id="authPassword" name="password" type="password"
+                 placeholder="{{ 'Minimal 6 karakter' if setup else 'Password akun' }}"
+                 autocomplete="{{ 'new-password' if setup else 'current-password' }}"
+                 minlength="6" maxlength="128" required>
+          <button class="btn btn-outline-secondary auth-eye" type="button"
+                  data-password-toggle="#authPassword" aria-label="Tampilkan password">
+            <i class="bi bi-eye" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      {% if setup %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="authConfirm">Ulangi Password</label>
+        <div class="input-group auth-input">
+          <span class="input-group-text"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
+          <input class="form-control" id="authConfirm" name="confirm_password" type="password"
+                 placeholder="Ketik ulang password" autocomplete="new-password"
+                 minlength="6" maxlength="128" required>
+          <button class="btn btn-outline-secondary auth-eye" type="button"
+                  data-password-toggle="#authConfirm" aria-label="Tampilkan password">
+            <i class="bi bi-eye" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      {% endif %}
+
+      <button type="submit" class="btn btn-primary auth-submit">
+        <i class="bi {{ 'bi-person-plus' if setup else 'bi-box-arrow-in-right' }} me-1" aria-hidden="true"></i>
+        {{ 'Buat Akun & Masuk' if setup else 'Masuk' }}
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

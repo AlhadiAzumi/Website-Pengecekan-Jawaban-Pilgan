@@ -2,6 +2,8 @@
 
 Panduan ini menjelaskan cara menjalankan aplikasi di [Render](https://render.com) memakai **Docker**, **Gunicorn**, **persistent disk**, dan **SQLite** (default). PostgreSQL opsional.
 
+> **Catatan:** deployment tidak dipakai untuk demo saat ini. Login sekarang dibuat langsung di aplikasi (akun admin pertama), jadi variabel `APP_USERNAME` / `APP_PASSWORD` di panduan ini sudah tidak dipakai.
+
 ---
 
 ## 1. File yang dipakai

@@ -12,7 +12,6 @@ mimetypes.add_type("font/woff", ".woff")
 import cv2
 from flask import (
     Flask,
-    Response,
     abort,
     flash,
     redirect,
@@ -20,6 +19,7 @@ from flask import (
     request,
     send_file,
     send_from_directory,
+    session,
     url_for,
 )
 from sqlalchemy import text
@@ -32,12 +32,22 @@ from config import (
     TEMPLATE_UPLOAD_DIR,
     UPLOAD_DIR,
     ensure_directories,
+    load_secret_key,
 )
 from core.alignment import (
     align_to_template,
     detect_markers,
     prepare_reference,
     preprocess_debug,
+)
+from core.auth import (
+    check_credentials,
+    check_password,
+    create_account,
+    get_account,
+    update_account,
+    validate_password,
+    validate_username,
 )
 from core.debug import (
     complete_debug_stages,
@@ -150,18 +160,26 @@ def _template_preview_context(
     }
 
 
+def safe_redirect_target(target):
+    """Terima hanya path lokal agar tidak menjadi open redirect."""
+    target = (target or "").strip()
+    if not target.startswith("/") or target.startswith("//") or "\\" in target:
+        return None
+    if target.rstrip("/") in ("/login", "/logout"):
+        return None
+    return target
+
+
 def create_app():
     app = Flask(__name__)
-    auth_username = os.environ.get("APP_USERNAME", "").strip()
-    auth_password = os.environ.get("APP_PASSWORD", "")
     app.config.update(
-        SECRET_KEY=os.environ.get(
-            "SECRET_KEY", "pilgan-dev-secret-ganti-di-produksi"
-        ),
+        SECRET_KEY=load_secret_key(),
         SQLALCHEMY_DATABASE_URI=DATABASE_URL,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         MAX_CONTENT_LENGTH=32 * 1024 * 1024,
         APP_TITLE=APP_TITLE,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
     )
 
     ensure_directories()
@@ -179,23 +197,106 @@ def create_app():
         except Exception:
             return {"status": "error"}, 500
 
-    if auth_username and auth_password:
-        @app.before_request
-        def require_basic_auth():
-            if request.path == "/healthz":
-                return None
-            auth = request.authorization
-            if (
-                auth is None
-                or auth.username != auth_username
-                or auth.password != auth_password
-            ):
-                return Response(
-                    "Autentikasi diperlukan.",
-                    401,
-                    {"WWW-Authenticate": 'Basic realm="Pilgan Checker"'},
-                )
+    @app.before_request
+    def require_login():
+        if request.endpoint in {"static", "healthz", "login"}:
             return None
+        account = get_account()
+        if account is None:
+            return redirect(url_for("login"))
+        if session.get("auth_user") != account["username"]:
+            target = request.full_path.rstrip("?") if request.method == "GET" else ""
+            return redirect(url_for("login", next=target))
+        return None
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        account = get_account()
+        setup = account is None
+        next_url = safe_redirect_target(request.values.get("next", ""))
+
+        if not setup and session.get("auth_user") == account["username"]:
+            return redirect(next_url or url_for("index"))
+
+        form_username = ""
+        if request.method == "POST":
+            form_username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+
+            if setup:
+                confirm = request.form.get("confirm_password", "")
+                error = (
+                    validate_username(form_username)
+                    or validate_password(password)
+                    or (
+                        None
+                        if password == confirm
+                        else "Konfirmasi password tidak sama."
+                    )
+                )
+                if error:
+                    flash(error, "danger")
+                else:
+                    create_account(form_username, password)
+                    session.clear()
+                    session["auth_user"] = form_username
+                    flash(
+                        "Akun admin berhasil dibuat. Selamat datang di Pilgan Checker!",
+                        "success",
+                    )
+                    return redirect(next_url or url_for("index"))
+            elif check_credentials(form_username, password):
+                session.clear()
+                session["auth_user"] = account["username"]
+                flash(f"Selamat datang, {account['username']}.", "success")
+                return redirect(next_url or url_for("index"))
+            else:
+                flash("Username atau password salah.", "danger")
+
+        return render_template(
+            "auth.html",
+            setup=setup,
+            next_url=next_url or "",
+            form_username=form_username,
+        )
+
+    @app.route("/logout", methods=["POST"])
+    def logout():
+        session.clear()
+        flash("Anda sudah keluar dari aplikasi.", "info")
+        return redirect(url_for("login"))
+
+    @app.route("/account", methods=["POST"])
+    def account_update():
+        account = get_account()
+        if account is None:
+            return redirect(url_for("login"))
+
+        current_password = request.form.get("current_password", "")
+        if not check_password(account, current_password):
+            flash("Password saat ini salah.", "danger")
+            return redirect(url_for("settings_page"))
+
+        username = request.form.get("new_username", "").strip()
+        new_password = request.form.get("new_password", "")
+        confirm = request.form.get("confirm_password", "")
+
+        error = validate_username(username)
+        if not error and new_password:
+            error = validate_password(new_password)
+            if not error and new_password != confirm:
+                error = "Konfirmasi password baru tidak sama."
+        if error:
+            flash(error, "danger")
+            return redirect(url_for("settings_page"))
+
+        update_account(username, new_password or None)
+        session.clear()
+        flash(
+            "Akun berhasil diperbarui. Silakan masuk kembali dengan akun baru.",
+            "success",
+        )
+        return redirect(url_for("login"))
 
     @app.template_filter("media_url")
     def media_url(path):
@@ -228,6 +329,8 @@ def create_app():
             "settings": get_settings(),
             "current_year": datetime.now().year,
             "asset_version": asset_version("css/style.css", "js/app.js"),
+            "auth_page": request.endpoint == "login",
+            "current_user": session.get("auth_user"),
         }
 
     @app.route("/")

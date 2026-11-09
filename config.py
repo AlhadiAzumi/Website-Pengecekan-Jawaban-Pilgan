@@ -1,5 +1,6 @@
 """Konfigurasi global aplikasi."""
 import os
+import secrets
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -52,3 +53,28 @@ def ensure_directories():
         GENERATED_DIR,
     ):
         os.makedirs(path, exist_ok=True)
+
+
+def load_secret_key():
+    """Pakai SECRET_KEY dari env, atau buat kunci lokal yang persisten."""
+    env_key = os.environ.get("SECRET_KEY", "").strip()
+    if env_key:
+        return env_key
+
+    path = os.path.join(INSTANCE_DIR, "secret_key")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            saved = handle.read().strip()
+        if len(saved) >= 32:
+            return saved
+    except OSError:
+        pass
+
+    key = secrets.token_hex(32)
+    try:
+        os.makedirs(INSTANCE_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(key)
+    except OSError:
+        pass
+    return key

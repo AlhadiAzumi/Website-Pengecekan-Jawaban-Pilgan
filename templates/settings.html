@@ -116,6 +116,45 @@
   </div>
 </form>
 
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-shield-lock me-1"></i>Akun &amp; Keamanan</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('account_update') }}">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold" for="newUsername">Username</label>
+          <input class="form-control" id="newUsername" name="new_username" type="text"
+                 value="{{ current_user }}" minlength="3" maxlength="40"
+                 autocomplete="username" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold" for="newPassword">Password baru</label>
+          <input class="form-control" id="newPassword" name="new_password" type="password"
+                 placeholder="Kosongkan jika tetap" autocomplete="new-password"
+                 minlength="6" maxlength="128">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold" for="confirmNewPassword">Ulangi password baru</label>
+          <input class="form-control" id="confirmNewPassword" name="confirm_password" type="password"
+                 placeholder="Ketik ulang password baru" autocomplete="new-password"
+                 minlength="6" maxlength="128">
+        </div>
+      </div>
+      <div class="row g-3 align-items-end mt-1">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold" for="currentPassword">Password saat ini</label>
+          <input class="form-control" id="currentPassword" name="current_password" type="password"
+                 placeholder="Wajib untuk menyimpan perubahan" autocomplete="current-password" required>
+        </div>
+        <div class="col-md-7">
+          <button class="btn btn-outline-primary" type="submit"><i class="bi bi-check2-circle me-1"></i>Perbarui Akun</button>
+          <span class="text-muted-sm ms-2">Setelah diubah, Anda akan diminta masuk kembali.</span>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="row g-3">
   <div class="col-lg-8">
     <div class="card h-100">
