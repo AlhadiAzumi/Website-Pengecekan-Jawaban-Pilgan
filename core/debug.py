@@ -4,6 +4,7 @@ import os
 import cv2
 
 from config import UPLOAD_DIR
+from core.alignment import preprocess_debug
 
 STAGE_LABELS = {
     "1_original": "1. Citra Asli",
@@ -18,6 +19,14 @@ STAGE_LABELS = {
     "8_morphology": "8. Morfologi",
     "9_deteksi": "9. Hasil Deteksi",
 }
+
+# Jika beberapa varian tahap 5 muncul, tampilkan dalam urutan metode yang dicoba.
+STAGE_PRIORITY = {
+    "5_kontur": 0,
+    "5_marker": 1,
+    "5_orb": 2,
+}
+
 
 KIND_SECTIONS = {
     "template": [
@@ -64,9 +73,10 @@ def save_debug_set(folder, images):
 
 
 def debug_items(saved):
-    """Ubah dict path menjadi daftar siap tampil di template."""
+    """Ubah dict path menjadi daftar siap tampil, terurut sesuai nomor tahap."""
     items = []
-    for name, path in saved.items():
+    for name in sorted(saved, key=_stage_key):
+        path = saved[name]
         items.append(
             {
                 "name": name,
@@ -75,3 +85,48 @@ def debug_items(saved):
             }
         )
     return items
+
+
+def _stage_key(name):
+    """Kunci urutan: nomor tahap, varian tahap 5, lalu nama."""
+    prefix = name.split("_", 1)[0]
+    try:
+        number = int(prefix)
+    except ValueError:
+        number = 999
+    return (number, STAGE_PRIORITY.get(name, 0), name)
+
+
+def complete_debug_stages(saved):
+    """Lengkapi tahap blur/tepi pada hasil scan lama yang belum menyimpannya."""
+    if not saved:
+        return saved
+
+    updated = dict(saved)
+
+    def absolute(relative):
+        return os.path.join(UPLOAD_DIR, relative.replace("/", os.sep))
+
+    folder = None
+    if "2_grayscale" in saved and "3_blur" not in saved:
+        gray_path = absolute(saved["2_grayscale"])
+        gray = cv2.imread(gray_path, cv2.IMREAD_GRAYSCALE)
+        if gray is not None:
+            folder = os.path.dirname(gray_path)
+            blur = cv2.GaussianBlur(gray, (5, 5), 0)
+            path = save_debug_image(folder, "3_blur", blur)
+            if path:
+                updated["3_blur"] = path
+
+    if "1_original" in saved and "4_canny" not in saved:
+        original_path = absolute(saved["1_original"])
+        original = cv2.imread(original_path)
+        if original is not None:
+            folder = folder or os.path.dirname(original_path)
+            _, _, edges = preprocess_debug(original)
+            path = save_debug_image(folder, "4_canny", edges)
+            if path:
+                updated["4_canny"] = path
+
+    return updated
+

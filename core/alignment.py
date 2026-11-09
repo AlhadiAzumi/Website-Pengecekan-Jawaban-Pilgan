@@ -59,6 +59,14 @@ def _edge_map(gray):
     return cv2.dilate(edged, np.ones((3, 3), np.uint8), iterations=1)
 
 
+def preprocess_debug(image):
+    """Grayscale, blur, dan peta tepi citra asli untuk galeri tahapan."""
+    resized, _ = _resize_long_side(image, 1000)
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY) if resized.ndim == 3 else resized
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    return gray, blur, _edge_map(gray)
+
+
 def detect_paper_corners(image):
     """Cari kontur kertas terbesar yang menyerupai segi empat."""
     resized, scale = _resize_long_side(image, 1000)

@@ -33,8 +33,18 @@ from config import (
     UPLOAD_DIR,
     ensure_directories,
 )
-from core.alignment import align_to_template, detect_markers, prepare_reference
-from core.debug import debug_items, save_debug_image, save_debug_set
+from core.alignment import (
+    align_to_template,
+    detect_markers,
+    prepare_reference,
+    preprocess_debug,
+)
+from core.debug import (
+    complete_debug_stages,
+    debug_items,
+    save_debug_image,
+    save_debug_set,
+)
 from core.detection import detect_template, render_preview
 from core.excel_io import build_key_example, export_results_excel, read_key_excel
 from core.reading import measure_blank_baseline, process_aligned_sheet
@@ -874,41 +884,25 @@ def create_app():
                                     folder = os.path.join(
                                         DEBUG_UPLOAD_DIR, f"scan_{result.id}"
                                     )
-                                    saved = save_debug_set(
-                                        folder,
-                                        {
-                                            "1_original": image,
-                                            "2_grayscale": pipeline["gray"],
-                                            "6_aligned": aligned,
-                                            "7_threshold": pipeline["binary"],
-                                            "8_morphology": pipeline["morph"],
-                                            "9_deteksi": pipeline["annotated"],
-                                        },
-                                    )
-                                    if "edges" in steps:
-                                        edge_path = save_debug_image(
-                                            folder, "4_canny", steps["edges"]
-                                        )
-                                        if edge_path:
-                                            saved["4_canny"] = edge_path
-                                    if "outline" in steps:
-                                        outline_path = save_debug_image(
-                                            folder, "5_kontur", steps["outline"]
-                                        )
-                                        if outline_path:
-                                            saved["5_kontur"] = outline_path
-                                    if "marker" in steps:
-                                        marker_path = save_debug_image(
-                                            folder, "5_marker", steps["marker"]
-                                        )
-                                        if marker_path:
-                                            saved["5_marker"] = marker_path
-                                    if "orb" in steps:
-                                        orb_path = save_debug_image(
-                                            folder, "5_orb", steps["orb"]
-                                        )
-                                        if orb_path:
-                                            saved["5_orb"] = orb_path
+                                    original_gray, original_blur, original_edges = preprocess_debug(image)
+                                    debug_images = {
+                                        "1_original": image,
+                                        "2_grayscale": original_gray,
+                                        "3_blur": original_blur,
+                                        "4_canny": steps.get("edges", original_edges),
+                                        "6_aligned": aligned,
+                                        "7_threshold": pipeline["binary"],
+                                        "8_morphology": pipeline["morph"],
+                                        "9_deteksi": pipeline["annotated"],
+                                    }
+                                    for step_name, image_name in (
+                                        ("outline", "5_kontur"),
+                                        ("marker", "5_marker"),
+                                        ("orb", "5_orb"),
+                                    ):
+                                        if step_name in steps:
+                                            debug_images[image_name] = steps[step_name]
+                                    saved = save_debug_set(folder, debug_images)
                                     result.aligned_path = saved.get("6_aligned", "")
                                     result.threshold_path = saved.get("7_threshold", "")
                                     result.morph_path = saved.get("8_morphology", "")
@@ -1066,7 +1060,12 @@ def create_app():
     @app.route("/results/<int:result_id>")
     def result_detail(result_id):
         result = db.get_or_404(ScanResult, result_id)
-        steps = debug_items(result.debug_steps or {})
+        stored = result.debug_steps or {}
+        completed = complete_debug_stages(stored)
+        if completed != stored:
+            result.debug_steps = completed
+            db.session.commit()
+        steps = debug_items(completed)
         return render_template(
             "result_detail.html", result=result, debug_items=steps
         )
