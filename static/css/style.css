@@ -109,13 +109,21 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f59e0b, #fb923c);
-  color: #ffffff;
-  font-size: 1.05rem;
-  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.35);
+  width: 40px;
+  height: 40px;
+  padding: 2px;
+  border-radius: 13px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 16px rgba(33, 18, 72, 0.12);
+  overflow: hidden;
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .app-navbar .nav-link {
@@ -1488,10 +1496,17 @@ h1, h2, h3, h4, h5, h6 {
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: linear-gradient(145deg, var(--brand), #a855f7);
-  color: #ffffff;
-  font-size: 1.4rem;
-  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.3);
+  background: #ffffff;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(33, 18, 72, 0.16);
+  overflow: hidden;
+}
+
+.auth-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .auth-eyebrow {

@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_title }}{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=asset_version) }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16.png', v=asset_version) }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png', v=asset_version) }}">
+  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+  <meta name="theme-color" content="#7c3aed">
   <link href="{{ url_for('static', filename='vendor/fonts/poppins.css') }}" rel="stylesheet">
   <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
   <link href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
@@ -20,7 +26,7 @@
     <nav class="navbar navbar-expand-lg navbar-light app-navbar">
       <div class="container-fluid px-0">
         <a class="navbar-brand fw-semibold d-flex align-items-center gap-2" href="{{ url_for('index') }}">
-          <span class="brand-mark"><i class="bi bi-ui-checks"></i></span>
+          <span class="brand-mark"><img src="{{ url_for('static', filename='img/logo-mark.png', v=asset_version) }}" alt="" width="40" height="40"></span>
           <span class="d-none d-sm-inline">Pilgan Checker</span>
           <span class="d-inline d-sm-none">Pilgan</span>
         </a>

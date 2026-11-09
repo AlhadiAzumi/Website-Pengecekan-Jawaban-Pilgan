@@ -197,9 +197,15 @@ def create_app():
         except Exception:
             return {"status": "error"}, 500
 
+    @app.route("/favicon.ico")
+    def favicon():
+        return send_from_directory(
+            app.static_folder, "favicon.ico", mimetype="image/vnd.microsoft.icon"
+        )
+
     @app.before_request
     def require_login():
-        if request.endpoint in {"static", "healthz", "login"}:
+        if request.endpoint in {"static", "healthz", "login", "favicon"}:
             return None
         account = get_account()
         if account is None:

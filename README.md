@@ -129,6 +129,12 @@ Script akan:
 
 Semua aset tampilan (Bootstrap, Bootstrap Icons, Chart.js, dan font Poppins) disimpan di `static/vendor/`, jadi UI tetap tampil normal tanpa koneksi internet.
 
+Logo proyek ada di `static/img/logo-projek.jpeg`. Dari file itu dibuat ikon tab browser (`static/favicon.ico`), ikon aplikasi (`static/img/logo-192.png`, `logo-512.png`), dan logo di navbar/login. Jika logo diganti, jalankan ulang:
+
+```powershell
+python tools\make_icons.py
+```
+
 Untuk menjalankan tanpa membuka browser:
 
 ```powershell
