@@ -136,6 +136,36 @@ Untuk menjalankan tanpa membuka browser:
 .\demo.ps1 -NoBrowser
 ```
 
+### Demo dari HP (satu jaringan Wi-Fi)
+
+1. Double-click **`demo-lan.bat`**, atau jalankan:
+   ```powershell
+   .\demo.ps1 -Lan
+   ```
+2. Di terminal akan muncul alamat untuk HP, misalnya:
+   ```
+   HP : http://192.168.1.10:5000  (Wi-Fi)
+   ```
+   Jika muncul beberapa alamat, pakai yang berlabel **Wi-Fi** (bukan VirtualBox/VMware/Hyper-V).
+3. Buka alamat tersebut di browser HP. Laptop dan HP harus terhubung ke Wi-Fi yang sama.
+
+Jika HP tidak bisa membuka alamatnya:
+
+- Pastikan Wi-Fi tidak memakai mode tamu / *AP isolation* yang memisahkan antar-perangkat.
+- Saat Windows Firewall menampilkan prompt untuk Python, pilih **Allow**.
+- Atau buat aturan firewall otomatis dari PowerShell **sebagai Administrator**:
+  ```powershell
+  .\demo.ps1 -Lan -OpenFirewall
+  ```
+
+Mode LAN membuka aplikasi ke seluruh jaringan. Sebaiknya aktifkan login sebelum presentasi:
+
+```powershell
+$env:APP_USERNAME = "admin"
+$env:APP_PASSWORD = "ganti-password"
+.\demo.ps1 -Lan
+```
+
 Data demo tetap tersimpan di `instance/pilgan.db` dan `uploads/`. Backup keduanya sebelum presentasi:
 
 ```powershell
