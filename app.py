@@ -50,8 +50,10 @@ from core.auth import (
     validate_username,
 )
 from core.debug import (
+    build_template_stages,
     complete_debug_stages,
     debug_items,
+    debug_items_in_folder,
     save_debug_image,
     save_debug_set,
 )
@@ -385,6 +387,8 @@ def create_app():
         tmp_src = request.form.get("tmp_src", "")
         tmp_debug_id = request.form.get("tmp_debug_id", "")
         original_name = request.form.get("original_name", "")
+        source_image = None
+        alignment_steps = {}
 
         try:
             upload = request.files.get("image")
@@ -392,7 +396,9 @@ def create_app():
                 src_path, src_rel, image = save_upload_image(
                     upload, prefix="template", subdir=TEMPLATE_UPLOAD_DIR
                 )
+                source_image = image
                 reference, info = prepare_reference(image)
+                alignment_steps = info.get("debug") or {}
                 tmp_ref_id = new_id()
                 ref_path = os.path.join(
                     TEMPLATE_UPLOAD_DIR, f"template_ref_{tmp_ref_id}.jpg"
@@ -414,6 +420,10 @@ def create_app():
                     raise ValueError("Citra templat tidak dapat dibaca. Unggah ulang.")
                 rectified = request.form.get("rectified", "resize")
                 markers = detect_markers(reference)
+                if tmp_src:
+                    src_path = safe_upload_path(tmp_src)
+                    if src_path and os.path.exists(src_path):
+                        source_image = cv2.imread(src_path)
             else:
                 raise ValueError("Pilih gambar lembar jawaban kosong terlebih dahulu.")
 
@@ -427,14 +437,10 @@ def create_app():
             )
 
             folder = os.path.join(DEBUG_UPLOAD_DIR, f"template_{tmp_debug_id or new_id()}")
-            saved = save_debug_set(
-                folder,
-                {
-                    "2_grayscale": detection["debug"]["grayscale"],
-                    "7_threshold": detection["debug"]["threshold"],
-                    "9_deteksi": detection["preview"],
-                },
+            stages = build_template_stages(
+                source_image, reference, detection, alignment_steps
             )
+            saved = save_debug_set(folder, stages)
             preview_path = save_debug_image(folder, "preview", detection["preview"])
             preview_items = debug_items(saved)
 
@@ -477,6 +483,11 @@ def create_app():
                     )
                     db.session.add(template)
                     db.session.flush()
+                    saved_folder = os.path.join(
+                        DEBUG_UPLOAD_DIR, f"template_{template.id}"
+                    )
+                    save_debug_set(saved_folder, stages)
+                    save_debug_image(saved_folder, "preview", detection["preview"])
                     for item in detection["bubbles"]:
                         blank = baseline.get(
                             (item["question_no"], item["option_index"]), 0.0
@@ -585,8 +596,28 @@ def create_app():
         template = db.get_or_404(Template, template_id)
         ref_path = abs_upload(template.ref_path)
         reference = cv2.imread(ref_path) if ref_path else None
+        folder = os.path.join(DEBUG_UPLOAD_DIR, f"template_{template.id}")
+        debug_images = debug_items_in_folder(folder)
         preview_url = ""
         if reference is not None:
+            if not debug_images:
+                source_image = None
+                if template.source_path:
+                    source_path = abs_upload(template.source_path)
+                    if source_path and os.path.exists(source_path):
+                        source_image = cv2.imread(source_path)
+                detection = detect_template(
+                    reference,
+                    template.n_questions,
+                    template.n_options,
+                    int(template.n_blocks or 1),
+                    template.detect_params,
+                )
+                save_debug_set(
+                    folder,
+                    build_template_stages(source_image, reference, detection),
+                )
+                debug_images = debug_items_in_folder(folder)
             items = [
                 {
                     "x": bubble.x,
@@ -603,13 +634,13 @@ def create_app():
             preview = render_preview(
                 reference, items, marker_positions=template.marker_positions
             )
-            folder = os.path.join(DEBUG_UPLOAD_DIR, f"template_{template.id}")
             preview_path = save_debug_image(folder, "preview", preview)
             preview_url = url_for("media", filename=preview_path)
         return render_template(
             "template_detail.html",
             template=template,
             preview_url=preview_url,
+            debug_items=debug_images,
         )
 
     @app.route("/templates/<int:template_id>/delete", methods=["POST"])

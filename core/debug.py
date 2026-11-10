@@ -4,7 +4,7 @@ import os
 import cv2
 
 from config import UPLOAD_DIR
-from core.alignment import preprocess_debug
+from core.alignment import detect_paper_corners, preprocess_debug
 
 STAGE_LABELS = {
     "1_original": "1. Citra Asli",
@@ -95,6 +95,66 @@ def _stage_key(name):
     except ValueError:
         number = 999
     return (number, STAGE_PRIORITY.get(name, 0), name)
+
+
+def debug_items_in_folder(folder):
+    """Baca citra tahap 1-9 yang sudah tersimpan di sebuah folder debug."""
+    if not folder or not os.path.isdir(folder):
+        return []
+    saved = {}
+    for filename in os.listdir(folder):
+        stem, extension = os.path.splitext(filename)
+        if extension.lower() not in (".jpg", ".jpeg", ".png"):
+            continue
+        if stem not in STAGE_LABELS:
+            continue
+        saved[stem] = relative_path(os.path.join(folder, filename))
+    return debug_items(saved)
+
+
+def build_template_stages(source_image, reference, detection, alignment_steps=None):
+    """Susun citra tahap 1-9 untuk proses pembuatan templat kosong."""
+    debug = (detection or {}).get("debug", {})
+    stages = {}
+
+    if source_image is not None:
+        gray, blur, edges = preprocess_debug(source_image)
+        stages["1_original"] = source_image
+        stages["2_grayscale"] = gray
+        stages["3_blur"] = blur
+        stages["4_canny"] = edges
+
+    if reference is not None:
+        stages.setdefault("2_grayscale", debug.get("grayscale"))
+        stages.setdefault("3_blur", debug.get("blur"))
+        if "4_canny" not in stages:
+            stages["4_canny"] = preprocess_debug(reference)[2]
+        stages["6_aligned"] = reference
+
+    if "1_original" not in stages:
+        fallback = reference if reference is not None else debug.get("grayscale")
+        if fallback is not None:
+            stages["1_original"] = fallback
+
+    outline = (alignment_steps or {}).get("outline")
+    if outline is None and source_image is not None:
+        _, paper_debug = detect_paper_corners(source_image)
+        outline = paper_debug.get("outline")
+    stages["5_kontur"] = outline if outline is not None else stages.get("4_canny")
+
+    threshold = debug.get("binary")
+    if threshold is None:
+        threshold = debug.get("threshold")
+    stages["7_threshold"] = threshold
+    stages["8_morphology"] = debug.get("threshold")
+    if "7_threshold" not in stages:
+        stages["7_threshold"] = stages.get("8_morphology")
+
+    preview = (detection or {}).get("preview")
+    if preview is not None:
+        stages["9_deteksi"] = preview
+
+    return {name: image for name, image in stages.items() if image is not None}
 
 
 def complete_debug_stages(saved):
