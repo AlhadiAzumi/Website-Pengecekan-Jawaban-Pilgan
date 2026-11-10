@@ -92,12 +92,24 @@
             </select>
           </div>
           <div class="mb-3">
+            <label class="form-label fw-semibold" for="scanMarkStyle">Instruksi cara menjawab</label>
+            <select class="form-select" id="scanMarkStyle" name="mark_style">
+              {% for key, info in mark_styles.items() %}
+              <option value="{{ key }}"
+                      data-fill="{{ info.fill_ratio }}"
+                      data-instruction="{{ info.instruction }}"
+                      {{ 'selected' if settings.mark_style == key }}>{{ info.label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text" id="scanMarkHint">{{ mark_styles[settings.mark_style].instruction if settings.mark_style in mark_styles else mark_styles['semua'].instruction }}</div>
+          </div>
+          <div class="mb-3">
             <label class="form-label fw-semibold" for="fillRatio">Ambang area piksel (fill ratio)</label>
             <div class="d-flex align-items-center gap-3">
-              <input type="range" class="form-range flex-grow-1" id="fillRatio" name="fill_ratio" min="0.05" max="0.95" step="0.01" value="0.40">
-              <output class="badge text-bg-primary" id="fillRatioOut">0.40</output>
+              <input type="range" class="form-range flex-grow-1" id="fillRatio" name="fill_ratio" min="0.05" max="0.95" step="0.01" value="{{ settings.fill_ratio }}">
+              <output class="badge text-bg-primary" id="fillRatioOut">{{ "%.2f"|format(settings.fill_ratio) }}</output>
             </div>
-            <div class="form-text">Gunakan 0.25&ndash;0.35 untuk jawaban dilingkari tipis, 0.40&ndash;0.50 untuk dihitamkan penuh.</div>
+            <div class="form-text">Gunakan 0.20&ndash;0.30 untuk jawaban dilingkari/disilang tipis, 0.40&ndash;0.50 untuk dihitamkan penuh.</div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" for="thresholdMethod">Metode thresholding</label>
@@ -128,6 +140,11 @@
           <div>
             <label class="form-label fw-semibold" for="className">Kelas (opsional, berlaku untuk batch)</label>
             <input class="form-control" type="text" id="className" name="class_name" placeholder="Contoh: XI IPA 2">
+          </div>
+          <div class="alert alert-light border mt-3 mb-0 small">
+            <i class="bi bi-info-circle me-1"></i>
+            Opsi yang dicoret dengan tanda <strong>=</strong> tidak dihitung. Jawaban ganda
+            tetap ditandai <strong>GANDA</strong> dan dianggap belum dijawab.
           </div>
         </div>
       </div>
@@ -318,6 +335,23 @@
     const sync = function () { fillRatioOut.textContent = Number(fillRatio.value).toFixed(2); };
     fillRatio.addEventListener("input", sync);
     sync();
+  }
+
+  const markStyle = document.getElementById("scanMarkStyle");
+  const markHint = document.getElementById("scanMarkHint");
+  function syncMarkStyle(updateFill) {
+    if (!markStyle) return;
+    const option = markStyle.options[markStyle.selectedIndex];
+    if (!option) return;
+    if (markHint) markHint.textContent = option.dataset.instruction || "";
+    if (updateFill && fillRatio && option.dataset.fill) {
+      fillRatio.value = option.dataset.fill;
+      fillRatio.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+  if (markStyle) {
+    markStyle.addEventListener("change", function () { syncMarkStyle(true); });
+    syncMarkStyle(false);
   }
 })();
 </script>

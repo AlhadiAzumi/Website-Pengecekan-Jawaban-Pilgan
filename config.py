@@ -31,6 +31,7 @@ CANONICAL_LONG_SIDE = 1600
 
 DEFAULT_SETTINGS = {
     "fill_ratio": 0.40,
+    "mark_style": "semua",
     "threshold_method": "otsu",
     "adaptive_block_size": 31,
     "adaptive_c": 15,
@@ -41,6 +42,39 @@ DEFAULT_SETTINGS = {
     "circularity": 0.60,
     "blur_threshold": 45.0,
 }
+
+# Pilihan instruksi cara menjawab. Nilai fill_ratio adalah titik awal yang
+# disarankan; pengguna tetap dapat menggeser ambang sesuai kondisi lembar.
+MARK_STYLES = {
+    "semua": {
+        "label": "Boleh semuanya",
+        "fill_ratio": 0.40,
+        "instruction": (
+            "Boleh menyilang (X), melingkari, atau menghitamkan penuh satu "
+            "jawaban. Jangan menandai lebih dari satu opsi."
+        ),
+    },
+    "silang": {
+        "label": "Hanya silang (X)",
+        "fill_ratio": 0.20,
+        "instruction": "Beri tanda silang (X) pada satu jawaban yang dipilih.",
+    },
+    "bulat": {
+        "label": "Hanya bulat / lingkari",
+        "fill_ratio": 0.20,
+        "instruction": "Lingkari satu jawaban yang dipilih.",
+    },
+    "bulat_hitam": {
+        "label": "Hanya bulat hitam",
+        "fill_ratio": 0.40,
+        "instruction": "Hitamkan penuh satu bulatan jawaban yang dipilih.",
+    },
+}
+
+
+def mark_style_info(style):
+    """Ambil definisi gaya jawaban, kembali ke ``semua`` bila tidak dikenal."""
+    return MARK_STYLES.get(str(style or ""), MARK_STYLES["semua"])
 
 
 def ensure_directories():

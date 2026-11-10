@@ -126,6 +126,18 @@ def export_results_excel(results):
             }
         )
         for answer in result.answers:
+            canceled_labels = [
+                option.get("label")
+                for option in (answer.all_ratios or [])
+                if option.get("canceled")
+            ]
+            notes = []
+            if answer.status == "ganda":
+                notes.append("Ganda - dianggap belum dijawab")
+            if canceled_labels:
+                notes.append(
+                    "Dicoret (=): " + ", ".join(canceled_labels)
+                )
             detail_rows.append(
                 {
                     "Nama Siswa": result.student_name,
@@ -134,6 +146,7 @@ def export_results_excel(results):
                     "Jawaban Siswa": answer.student_answer,
                     "Status": answer.status.title(),
                     "Rasio": round(answer.ratio or 0.0, 4),
+                    "Catatan": "; ".join(notes),
                 }
             )
             stats = question_stats.setdefault(

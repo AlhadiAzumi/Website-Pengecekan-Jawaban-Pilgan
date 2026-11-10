@@ -146,7 +146,12 @@ def main():
             scan, reference, info["markers"], mode="auto"
         )
         result = process_aligned_sheet(
-            aligned, bubbles, key_map, n_questions, params
+            aligned,
+            bubbles,
+            key_map,
+            n_questions,
+            params,
+            reference=reference,
         )
         cv2.imwrite(
             os.path.join(OUTPUT_DIR, f"hasil_{scan_index + 1}.jpg"),
@@ -197,6 +202,7 @@ def main():
         {number: "B" for number in range(1, n_questions + 1)},
         n_questions,
         outline_params,
+        reference=reference,
     )
     print(
         "    lingkaran dengan fill_ratio 0.30: "
@@ -216,7 +222,12 @@ def main():
     adaptive_params = dict(params)
     adaptive_params["threshold_method"] = "adaptive"
     noisy_result = process_aligned_sheet(
-        noisy, bubbles, key_map, n_questions, adaptive_params
+        noisy,
+        bubbles,
+        key_map,
+        n_questions,
+        adaptive_params,
+        reference=reference,
     )
     print(
         "    adaptive pada templat kosong: "

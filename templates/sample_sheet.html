@@ -19,6 +19,15 @@
             <label class="form-label fw-semibold">Judul lembar</label>
             <input class="form-control" type="text" name="title" value="{{ form.title }}">
           </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Instruksi cara menjawab</label>
+            <select class="form-select" name="mark_style">
+              {% for key, info in mark_styles.items() %}
+              <option value="{{ key }}" {{ 'selected' if form.mark_style == key }}>{{ info.label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Teks instruksi akan dicetak pada lembar.</div>
+          </div>
           <div class="row g-3">
             <div class="col-6">
               <label class="form-label fw-semibold">Jumlah soal</label>

@@ -59,7 +59,7 @@
             </div>
           </div>
           <div class="col-6">
-            <div class="border rounded-3 py-2" title="Jumlah soal yang memiliki lebih dari satu bulatan terisi.">
+            <div class="border rounded-3 py-2" title="Jumlah soal dengan lebih dari satu opsi terisi. Jawaban ganda dianggap belum dijawab dan tidak memperoleh nilai.">
               <div class="fw-bold fs-4 text-orange">{{ result.double }}</div>
               <div class="text-muted-sm">Ganda</div>
             </div>
@@ -79,7 +79,7 @@
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-bullseye me-1"></i>Lembar Teranotasi</span>
-        <span class="text-muted-sm">Hijau benar &middot; merah salah &middot; kuning kosong/ganda</span>
+        <span class="text-muted-sm">Hijau benar &middot; merah salah &middot; kuning kosong/ganda &middot; oranye dicoret (=)</span>
       </div>
       <div class="card-body">
         {% if result.annotated_path %}
@@ -117,12 +117,24 @@
           <span>Kunci: <strong>{{ answer.correct_answer or '-' }}</strong></span>
         </div>
         {% if answer.all_ratios %}
+        {% set canceled_opts = answer.all_ratios|selectattr('canceled')|list %}
         <div class="option-pills">
           {% for opt in answer.all_ratios %}
-          <span class="btn btn-sm {{ 'btn-success' if opt.label == answer.correct_answer else ('btn-danger' if opt.label == answer.student_answer else 'btn-outline-secondary') }} disabled"
-                title="Rasio {{ '%.2f'|format(opt.ratio) }}">{{ opt.label }}</span>
+          <span class="btn btn-sm {{ 'btn-warning' if opt.canceled else ('btn-success' if opt.label == answer.correct_answer else ('btn-danger' if opt.label == answer.student_answer else 'btn-outline-secondary')) }} disabled"
+                title="Rasio {{ '%.2f'|format(opt.ratio) }}{{ ' - dicoret (=), tidak dihitung' if opt.canceled else '' }}">{{ opt.label }}</span>
           {% endfor %}
         </div>
+        {% if answer.status == 'ganda' %}
+        <div class="small fw-semibold text-orange mt-1">
+          <i class="bi bi-exclamation-circle me-1"></i>Jawaban ganda &mdash; dianggap belum dijawab.
+        </div>
+        {% endif %}
+        {% if canceled_opts %}
+        <div class="small text-muted mt-1">
+          <i class="bi bi-slash-circle me-1"></i>Dicoret dengan tanda =:
+          {{ canceled_opts|map(attribute='label')|join(', ') }} (tidak dihitung).
+        </div>
+        {% endif %}
         {% endif %}
       </div>
       {% endfor %}

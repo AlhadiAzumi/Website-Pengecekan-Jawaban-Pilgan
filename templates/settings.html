@@ -59,6 +59,18 @@
         <div class="card-header"><i class="bi bi-bullseye me-1"></i>Deteksi Bulatan &amp; Pembacaan</div>
         <div class="card-body">
           <div class="mb-3">
+            <label class="form-label fw-semibold" for="markStyle">Instruksi cara menjawab</label>
+            <select class="form-select" id="markStyle" name="mark_style">
+              {% for key, info in mark_styles.items() %}
+              <option value="{{ key }}"
+                      data-fill="{{ info.fill_ratio }}"
+                      data-instruction="{{ info.instruction }}"
+                      {{ 'selected' if settings.mark_style == key }}>{{ info.label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text" id="markStyleHint">{{ mark_styles[settings.mark_style].instruction if settings.mark_style in mark_styles else mark_styles['semua'].instruction }}</div>
+          </div>
+          <div class="mb-3">
             <div class="d-flex justify-content-between">
               <label class="form-label fw-semibold mb-1">Threshold manual</label>
               <span class="slider-value" id="detectValue">{{ settings.detect_threshold }}</span>
@@ -91,7 +103,7 @@
               <label class="form-label fw-semibold mb-1">Ambang isi jawaban</label>
               <span class="slider-value" id="fillValue">{{ "%.2f"|format(settings.fill_ratio) }}</span>
             </div>
-            <input class="form-range" type="range" name="fill_ratio" min="0.05" max="0.95" step="0.01"
+            <input class="form-range" type="range" id="fillRatioInput" name="fill_ratio" min="0.05" max="0.95" step="0.01"
                    value="{{ settings.fill_ratio }}" data-output="#fillValue" data-decimals="2">
             <div class="form-text">Rasio piksel minimum agar sebuah opsi dianggap terisi.</div>
           </div>
@@ -190,4 +202,28 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var style = document.getElementById("markStyle");
+  var fill = document.getElementById("fillRatioInput");
+  var hint = document.getElementById("markStyleHint");
+  if (!style) return;
+
+  function apply(updateFill) {
+    var option = style.options[style.selectedIndex];
+    if (!option) return;
+    if (hint) hint.textContent = option.dataset.instruction || "";
+    if (updateFill && fill && option.dataset.fill) {
+      fill.value = option.dataset.fill;
+      fill.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  style.addEventListener("change", function () { apply(true); });
+  apply(false);
+})();
+</script>
 {% endblock %}

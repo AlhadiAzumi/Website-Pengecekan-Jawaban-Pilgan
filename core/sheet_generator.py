@@ -56,6 +56,7 @@ def generate_blank_sheet(
     n_blocks=None,
     title="LEMBAR JAWABAN PILIHAN GANDA",
     subtitle="Isi dengan menghitamkan bulatan jawaban yang dipilih",
+    footer=None,
 ):
     """Kembalikan (citra BGR, daftar marker, daftar bubble teoretis)."""
     if n_questions < 1:
@@ -179,7 +180,8 @@ def generate_blank_sheet(
     # footer
     cv2.putText(
         image,
-        "Hitamkan penuh bulatan. Jangan menandai lebih dari satu opsi per soal.",
+        footer
+        or "Hitamkan penuh bulatan. Jangan menandai lebih dari satu opsi per soal.",
         (110, PAGE_H - 70),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.45,

@@ -28,11 +28,13 @@ from config import (
     DATABASE_URL,
     DEBUG_UPLOAD_DIR,
     GENERATED_DIR,
+    MARK_STYLES,
     SCAN_UPLOAD_DIR,
     TEMPLATE_UPLOAD_DIR,
     UPLOAD_DIR,
     ensure_directories,
     load_secret_key,
+    mark_style_info,
 )
 from core.alignment import (
     align_to_template,
@@ -335,6 +337,7 @@ def create_app():
         return {
             "app_title": APP_TITLE,
             "settings": get_settings(),
+            "mark_styles": MARK_STYLES,
             "current_year": datetime.now().year,
             "asset_version": asset_version("css/style.css", "js/app.js"),
             "auth_page": request.endpoint == "login",
@@ -550,6 +553,7 @@ def create_app():
             "n_options": 5,
             "n_blocks": 2,
             "title": "LEMBAR JAWABAN PILIHAN GANDA",
+            "mark_style": settings.get("mark_style", "semua"),
         }
         generated = None
         if request.method == "POST":
@@ -561,13 +565,19 @@ def create_app():
                 "n_blocks": _as_int(request.form.get("n_blocks"), 0, 0, 4),
                 "title": request.form.get("title", "").strip()
                 or "LEMBAR JAWABAN PILIHAN GANDA",
+                "mark_style": request.form.get("mark_style", "semua"),
             }
+            if form["mark_style"] not in MARK_STYLES:
+                form["mark_style"] = "semua"
+            style_info = mark_style_info(form["mark_style"])
             try:
                 image, _, _ = generate_blank_sheet(
                     form["n_questions"],
                     form["n_options"],
                     form["n_blocks"] or None,
                     title=form["title"],
+                    subtitle="Ikuti instruksi cara menjawab di bagian bawah lembar.",
+                    footer=style_info["instruction"],
                 )
                 file_id = new_id()
                 png_name = f"lembar_{file_id}.png"
@@ -883,6 +893,7 @@ def create_app():
 
     @app.route("/scan", methods=["GET", "POST"])
     def scan_page():
+        settings = get_settings()
         templates = Template.query.order_by(Template.name).all()
         selected_template_id = request.values.get("template_id", type=int)
         selected_template = (
@@ -926,16 +937,26 @@ def create_app():
                         numbers = request.form.getlist("student_nos")
                         common_class = request.form.get("class_name", "").strip()
                         alignment_mode = request.form.get("alignment_mode", "auto")
-                        params = dict(get_settings())
+                        params = dict(settings)
                         stored = selected_template.detect_params or {}
                         params["cell_mode"] = stored.get("cell_mode", "bubble")
                         params["mark_gain"] = float(
                             stored.get("mark_gain", 1.0) or 1.0
                         )
+                        mark_style = request.form.get(
+                            "mark_style", settings.get("mark_style", "semua")
+                        )
+                        if mark_style not in MARK_STYLES:
+                            mark_style = "semua"
+                        style_info = mark_style_info(mark_style)
                         params.update(
                             {
+                                "mark_style": mark_style,
                                 "fill_ratio": _as_float(
-                                    request.form.get("fill_ratio"), 0.40, 0.05, 0.95
+                                    request.form.get("fill_ratio"),
+                                    style_info["fill_ratio"],
+                                    0.05,
+                                    0.95,
                                 ),
                                 "threshold_method": request.form.get(
                                     "threshold_method", "otsu"
@@ -1002,6 +1023,7 @@ def create_app():
                                         key_map,
                                         selected_template.n_questions,
                                         params,
+                                        reference=reference,
                                     )
                                     result = ScanResult(
                                         batch_id=batch_id,
@@ -1125,6 +1147,8 @@ def create_app():
             selected_template=selected_template,
             selected_key_id=selected_key_id,
             keys=keys,
+            settings=settings,
+            mark_styles=MARK_STYLES,
         )
 
     def _filtered_results():
@@ -1271,6 +1295,9 @@ def create_app():
                 ),
                 "adaptive_c": _as_int(request.form.get("adaptive_c"), 15, -20, 50),
                 "morph_kernel": _as_int(request.form.get("morph_kernel"), 3, 1, 15),
+                "mark_style": request.form.get("mark_style", "semua")
+                if request.form.get("mark_style") in MARK_STYLES
+                else "semua",
                 "fill_ratio": _as_float(
                     request.form.get("fill_ratio"), 0.40, 0.05, 0.95
                 ),

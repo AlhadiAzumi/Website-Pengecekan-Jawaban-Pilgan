@@ -45,6 +45,162 @@ def apply_morphology(binary, kernel_size=3):
     return closed
 
 
+def _prepared_binary(image, params):
+    """Biner + morfologi dengan parameter baca yang sama."""
+    gray = (
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if image.ndim == 3
+        else image.copy()
+    )
+    binary, label = binarize(
+        gray,
+        params.get("threshold_method", "otsu"),
+        params.get("adaptive_block_size", 31),
+        params.get("adaptive_c", 15),
+    )
+    return binary, apply_morphology(binary, params.get("morph_kernel", 3)), label
+
+
+def _cancellation_bands(binary, reference_binary, x, y, radius):
+    """Cari garis horizontal (tanda ``=``) pada tinta tambahan di sekitar bulatan.
+
+    Tinta cetak lembar kosong dibuang dengan membandingkan hasil biner scan
+    terhadap biner templat. Hanya coretan yang melewati sisi kiri dan kanan
+    bulatan yang dihitung agar tanda silang (X) tidak ikut dianggap coretan.
+    """
+    radius = max(4.0, float(radius))
+    half = int(np.ceil(2.6 * radius))
+    height, width = binary.shape[:2]
+    cx, cy = int(round(x)), int(round(y))
+    x0, x1 = cx - half, cx + half + 1
+    y0, y1 = cy - half, cy + half + 1
+    sx0, sy0 = max(0, x0), max(0, y0)
+    sx1, sy1 = min(width, x1), min(height, y1)
+    if sx1 <= sx0 or sy1 <= sy0:
+        return []
+    roi = binary[sy0:sy1, sx0:sx1]
+    ref = reference_binary[sy0:sy1, sx0:sx1]
+
+    # Toleransi kecil untuk selisih penyelarasan, tanpa menghapus coretan.
+    dilate_size = max(3, int(round(radius * 0.18)) * 2 + 1)
+    ref_mask = cv2.dilate(
+        ref,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_size, dilate_size)),
+        iterations=1,
+    )
+    extra = cv2.bitwise_and(roi, cv2.bitwise_not(ref_mask))
+    if not extra.any():
+        return []
+
+    local_cx = cx - sx0
+    local_cy = cy - sy0
+    # Hanya periksa tinta di luar cincin bulatan. Bagian dalam bulatan yang
+    # dihitamkan tidak boleh ikut membentuk komponen garis.
+    annulus = np.zeros(roi.shape[:2], np.uint8)
+    cv2.circle(annulus, (local_cx, local_cy), half, 255, -1)
+    cv2.circle(
+        annulus,
+        (local_cx, local_cy),
+        max(2, int(round(1.16 * radius))),
+        0,
+        -1,
+    )
+    extra = cv2.bitwise_and(extra, annulus)
+    if not extra.any():
+        return []
+
+    close_w = max(3, int(round(radius * 0.18)) * 2 + 1)
+    # Hanya menutup celah horizontal. Penutupan vertikal dapat menyatukan dua
+    # garis "=" menjadi satu komponen tinggi yang lalu ditolak.
+    extra = cv2.morphologyEx(
+        extra, cv2.MORPH_CLOSE, np.ones((1, close_w), np.uint8)
+    )
+    open_w = max(4, int(round(radius * 0.35)))
+    horizontal = cv2.morphologyEx(
+        extra, cv2.MORPH_OPEN, np.ones((1, open_w), np.uint8)
+    )
+
+    count, _, stats, _ = cv2.connectedComponentsWithStats(horizontal, 8)
+    min_width = max(3.0, 0.20 * radius)
+    # Dua garis "=" dapat menyatu menjadi satu komponen tinggi setelah
+    # thresholding + morfologi, jadi batas tinggi dibuat longgar.
+    max_height = max(6.0, 1.70 * radius)
+    min_area = max(4.0, 0.12 * radius)
+    components = []
+    for index in range(1, count):
+        bx, by, bw, bh, area = stats[index]
+        if bw < min_width or bh > max_height or area < min_area:
+            continue
+        component_y = by + bh / 2.0
+        if abs(component_y - local_cy) > 0.85 * radius:
+            continue
+        components.append(
+            {
+                "x": int(bx),
+                "y": int(by),
+                "w": int(bw),
+                "h": int(bh),
+                "cy": float(component_y),
+            }
+        )
+
+    components.sort(key=lambda item: item["cy"])
+    groups = []
+    for component in components:
+        if not groups:
+            groups.append([component])
+            continue
+        previous_y = sum(item["cy"] for item in groups[-1]) / len(groups[-1])
+        tolerance = max(4.0, 0.40 * radius)
+        if component["cy"] - previous_y > tolerance:
+            groups.append([component])
+        else:
+            groups[-1].append(component)
+
+    bands = []
+    for group in groups:
+        left = any(item["x"] + item["w"] <= local_cx for item in group)
+        right = any(item["x"] >= local_cx for item in group)
+        if not (left and right):
+            continue
+        span = max(item["x"] + item["w"] for item in group) - min(
+            item["x"] for item in group
+        )
+        # Coretan "=" harus lebih lebar dari diameter bulatan agar potongan
+        # lingkaran tipis tidak salah dianggap pembatalan.
+        if span < 2.0 * radius:
+            continue
+        bands.append(float(span))
+    return bands
+
+
+def detect_cancellations(binary, reference_binary, measurements, radius_scale=1.0):
+    """Tandai tiap bulatan yang dicoret dengan garis ``=``.
+
+    Satu garis horizontal panjang yang melewati bulatan juga dianggap
+    pembatalan. Selain itu diperlukan minimal dua garis sejajar (bentuk ``=``).
+    """
+    if reference_binary is None:
+        return measurements
+    for item in measurements:
+        bands = _cancellation_bands(
+            binary,
+            reference_binary,
+            item["x"],
+            item["y"],
+            item["radius"] * radius_scale,
+        )
+        item["cancel_marks"] = len(bands)
+        item["canceled"] = bool(
+            len(bands) >= 2
+            or (
+                len(bands) == 1
+                and bands[0] >= 2.2 * max(4.0, item["radius"] * radius_scale)
+            )
+        )
+    return measurements
+
+
 def _bubble_ratio(binary, x, y, radius, inner_scale=1.0):
     radius = max(2.0, float(radius) * inner_scale)
     half = int(np.ceil(radius)) + 1
@@ -99,7 +255,12 @@ def measure_bubbles(binary, bubbles, inner_scale=1.0):
 
 
 def decide_answers(measurements, fill_ratio=0.40):
-    """Tentukan jawaban tiap soal berdasarkan jumlah opsi yang terisi."""
+    """Tentukan jawaban tiap soal berdasarkan opsi terisi dan coretan ``=``.
+
+    Opsi yang dicoret tidak dihitung. Jika dua opsi terisi tetapi salah satunya
+    dicoret, jawaban diambil dari opsi yang tersisa. Jawaban ganda sejati tetap
+    diberi status ``ganda`` dan dianggap belum dijawab saat penilaian.
+    """
     grouped = {}
     for item in measurements:
         grouped.setdefault(item["question_no"], []).append(item)
@@ -108,30 +269,55 @@ def decide_answers(measurements, fill_ratio=0.40):
     for question_no, items in grouped.items():
         ordered = sorted(items, key=lambda item: item["option_index"])
         filled = [item for item in ordered if item["ratio"] >= fill_ratio]
+        canceled = [item for item in filled if item.get("canceled")]
+        remaining = [item for item in filled if not item.get("canceled")]
+        canceled_labels = [item["option_label"] for item in canceled]
+
         if not filled:
             decisions[question_no] = {
                 "status": "kosong",
                 "student_answer": "-",
                 "filled": [],
+                "canceled": [],
+                "canceled_labels": [],
                 "ratios": ordered,
                 "top_ratio": max((item["ratio"] for item in ordered), default=0.0),
             }
-        elif len(filled) > 1:
-            decisions[question_no] = {
-                "status": "ganda",
-                "student_answer": "".join(item["option_label"] for item in filled),
-                "filled": filled,
-                "ratios": ordered,
-                "top_ratio": max(item["ratio"] for item in filled),
-            }
-        else:
-            item = filled[0]
+        elif len(remaining) == 1:
+            item = remaining[0]
             decisions[question_no] = {
                 "status": "terisi",
                 "student_answer": item["option_label"],
                 "filled": filled,
+                "canceled": canceled,
+                "canceled_labels": canceled_labels,
                 "ratios": ordered,
                 "top_ratio": item["ratio"],
+            }
+        elif not remaining:
+            # Semua opsi yang terisi dicoret: soal dianggap tidak dijawab.
+            decisions[question_no] = {
+                "status": "kosong",
+                "student_answer": "-",
+                "filled": filled,
+                "canceled": canceled,
+                "canceled_labels": canceled_labels,
+                "ratios": ordered,
+                "top_ratio": max(
+                    (item["ratio"] for item in filled), default=0.0
+                ),
+            }
+        else:
+            decisions[question_no] = {
+                "status": "ganda",
+                "student_answer": "".join(
+                    item["option_label"] for item in remaining
+                ),
+                "filled": filled,
+                "canceled": canceled,
+                "canceled_labels": canceled_labels,
+                "ratios": ordered,
+                "top_ratio": max(item["ratio"] for item in remaining),
             }
     return decisions
 
@@ -148,10 +334,13 @@ def score_decisions(decisions, key_map, n_questions):
                 "status": "kosong",
                 "student_answer": "-",
                 "filled": [],
+                "canceled": [],
+                "canceled_labels": [],
                 "ratios": [],
                 "top_ratio": 0.0,
             }
         student_answer = decision["student_answer"]
+        canceled_labels = decision.get("canceled_labels", [])
         if decision["status"] == "kosong":
             status = "kosong"
             empty += 1
@@ -171,11 +360,13 @@ def score_decisions(decisions, key_map, n_questions):
                 "correct_answer": key_answer,
                 "status": status,
                 "ratio": float(decision.get("top_ratio", 0.0)),
+                "canceled_labels": canceled_labels,
                 "all_ratios": [
                     {
                         "label": item["option_label"],
                         "ratio": round(float(item["ratio"]), 4),
                         "raw": round(float(item["raw_ratio"]), 4),
+                        "canceled": bool(item.get("canceled")),
                     }
                     for item in decision.get("ratios", [])
                 ],
@@ -265,6 +456,65 @@ def annotate_sheet(aligned, measurements, details, correct, wrong, empty, double
                         cv2.LINE_AA,
                     )
 
+        # Opsi yang dicoret dengan tanda "=" diberi penanda oranye.
+        canceled_labels = set(detail.get("canceled_labels") or [])
+        for item in items.values():
+            if item["option_label"] not in canceled_labels:
+                continue
+            center = (int(item["x"]), int(item["y"]))
+            box = int(item["radius"] * 1.4)
+            cv2.rectangle(
+                output,
+                (center[0] - box, center[1] - box),
+                (center[0] + box, center[1] + box),
+                (0, 140, 255),
+                max(1, int(round(2 * scale))),
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                output,
+                "=",
+                (center[0] + box + int(3 * scale), center[1] + int(5 * scale)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                max(0.5, 0.8 * scale),
+                (0, 140, 255),
+                max(1, int(round(2 * scale))),
+                cv2.LINE_AA,
+            )
+
+        # Jawaban ganda sejati diberi keterangan jelas di lembar.
+        if status == "ganda":
+            candidates = detail.get("filled") or []
+            if candidates:
+                anchor = min(candidates, key=lambda item: (item["y"], item["x"]))
+                text = "GANDA"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = max(0.45, 0.62 * scale)
+                thickness = max(1, int(round(2 * scale)))
+                text_x = int(anchor["x"] - anchor["radius"] * 1.1)
+                text_y = int(anchor["y"] - anchor["radius"] * 1.9)
+                text_y = max(int(18 * scale), text_y)
+                cv2.putText(
+                    output,
+                    text,
+                    (text_x, text_y),
+                    font,
+                    font_scale,
+                    (255, 255, 255),
+                    thickness + 3,
+                    cv2.LINE_AA,
+                )
+                cv2.putText(
+                    output,
+                    text,
+                    (text_x, text_y),
+                    font,
+                    font_scale,
+                    (0, 80, 230),
+                    thickness,
+                    cv2.LINE_AA,
+                )
+
     panel_w = int(430 * scale)
     panel_h = int(78 * scale)
     cv2.rectangle(output, (8, 8), (8 + panel_w, 8 + panel_h), (255, 255, 255), -1)
@@ -301,16 +551,16 @@ def quality_warning(gray, threshold=45.0):
     return None
 
 
-def process_aligned_sheet(aligned, bubbles, key_map, n_questions, params):
-    """Pipeline baca lengkap pada citra yang sudah diselaraskan."""
+def process_aligned_sheet(
+    aligned, bubbles, key_map, n_questions, params, reference=None
+):
+    """Pipeline baca lengkap pada citra yang sudah diselaraskan.
+
+    ``reference`` adalah citra templat kosong. Jika diberikan, tinta tambahan
+    dibandingkan dengan templat untuk mendeteksi coretan pembatalan ``=``.
+    """
     gray = cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY)
-    binary, method_label = binarize(
-        gray,
-        params.get("threshold_method", "otsu"),
-        params.get("adaptive_block_size", 31),
-        params.get("adaptive_c", 15),
-    )
-    morph = apply_morphology(binary, params.get("morph_kernel", 3))
+    binary, morph, method_label = _prepared_binary(aligned, params)
     measurements = measure_bubbles(morph, bubbles)
     # Pada lembar huruf, tanda lingkaran lebih tipis daripada bulatan yang
     # dihitamkan sehingga rasio tinta dikalikan faktor koreksi templat.
@@ -318,7 +568,20 @@ def process_aligned_sheet(aligned, bubbles, key_map, n_questions, params):
     if gain != 1.0:
         for item in measurements:
             item["ratio"] = float(min(1.0, max(0.0, item["ratio"] * gain)))
-    decisions = decide_answers(measurements, float(params.get("fill_ratio", 0.40)))
+    reference_binary = None
+    if (
+        reference is not None
+        and params.get("cell_mode", "bubble") != "letter"
+    ):
+        if reference.shape[:2] != aligned.shape[:2]:
+            reference = cv2.resize(
+                reference, (aligned.shape[1], aligned.shape[0])
+            )
+        _, reference_binary, _ = _prepared_binary(reference, params)
+        detect_cancellations(morph, reference_binary, measurements)
+    decisions = decide_answers(
+        measurements, float(params.get("fill_ratio", 0.40))
+    )
     scored = score_decisions(decisions, key_map, n_questions)
     annotated = annotate_sheet(
         aligned,
@@ -330,7 +593,10 @@ def process_aligned_sheet(aligned, bubbles, key_map, n_questions, params):
         scored["double"],
         scored["score"],
     )
-    warning = quality_warning(gray, params.get("blur_threshold", 45.0))
+    warning = quality_warning(
+        gray,
+        params.get("blur_threshold", 45.0),
+    )
     return {
         "gray": gray,
         "binary": binary,
