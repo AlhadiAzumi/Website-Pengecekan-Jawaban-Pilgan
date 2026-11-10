@@ -174,11 +174,19 @@ def _cancellation_bands(binary, reference_binary, x, y, radius):
     return bands
 
 
-def detect_cancellations(binary, reference_binary, measurements, radius_scale=1.0):
+def detect_cancellations(
+    binary,
+    reference_binary,
+    measurements,
+    radius_scale=1.0,
+    require_two_bands=False,
+):
     """Tandai tiap bulatan yang dicoret dengan garis ``=``.
 
     Satu garis horizontal panjang yang melewati bulatan juga dianggap
-    pembatalan. Selain itu diperlukan minimal dua garis sejajar (bentuk ``=``).
+    pembatalan. Pada lembar huruf, ``require_two_bands`` diaktifkan agar hanya
+    tanda ``=`` (dua garis sejajar) yang dianggap pembatalan; ini mencegah
+    lingkaran jawaban terbaca sebagai coretan.
     """
     if reference_binary is None:
         return measurements
@@ -191,13 +199,17 @@ def detect_cancellations(binary, reference_binary, measurements, radius_scale=1.
             item["radius"] * radius_scale,
         )
         item["cancel_marks"] = len(bands)
-        item["canceled"] = bool(
-            len(bands) >= 2
-            or (
-                len(bands) == 1
-                and bands[0] >= 2.2 * max(4.0, item["radius"] * radius_scale)
+        if require_two_bands:
+            canceled = len(bands) >= 2
+        else:
+            canceled = bool(
+                len(bands) >= 2
+                or (
+                    len(bands) == 1
+                    and bands[0] >= 2.2 * max(4.0, item["radius"] * radius_scale)
+                )
             )
-        )
+        item["canceled"] = canceled
     return measurements
 
 
@@ -569,16 +581,18 @@ def process_aligned_sheet(
         for item in measurements:
             item["ratio"] = float(min(1.0, max(0.0, item["ratio"] * gain)))
     reference_binary = None
-    if (
-        reference is not None
-        and params.get("cell_mode", "bubble") != "letter"
-    ):
+    if reference is not None:
         if reference.shape[:2] != aligned.shape[:2]:
             reference = cv2.resize(
                 reference, (aligned.shape[1], aligned.shape[0])
             )
-        _, reference_binary, _ = _prepared_binary(reference, params)
-        detect_cancellations(morph, reference_binary, measurements)
+        reference_binary, _, _ = _prepared_binary(reference, params)
+        detect_cancellations(
+            binary,
+            reference_binary,
+            measurements,
+            require_two_bands=params.get("cell_mode", "bubble") == "letter",
+        )
     decisions = decide_answers(
         measurements, float(params.get("fill_ratio", 0.40))
     )
