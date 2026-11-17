@@ -835,6 +835,49 @@ def fit_bubble_grid(candidates, n_questions, n_options, n_blocks=None):
     return best[1], best[2], best[0][0]
 
 
+def _suggest_layout(candidates, n_options):
+    """Tebak jumlah soal/blok dari grid kandidat bila input pengguna meleset.
+
+    Foto lembar sering sudah terlihat jelas tetapi pengguna salah mengisi
+    jumlah soal. Fungsi ini mencoba beberapa kelipatan jumlah baris yang
+    terdeteksi dan mengembalikan susunan yang paling banyak mencocokkan
+    kandidat, supaya pesan kesalahan bisa memberi saran yang konkret.
+    """
+    if not candidates:
+        return None
+    radii = [item["radius"] for item in candidates]
+    median_radius = float(np.median(radii)) if radii else 8.0
+    tolerance = max(7.0, median_radius * 1.35)
+    rows = [
+        row
+        for row in _cluster_1d(candidates, "y", max(5.0, tolerance * 0.85))
+        if len(row) >= max(3, n_options - 1)
+    ]
+    if not 5 <= len(rows) <= 150:
+        return None
+
+    best = None
+    for blocks in (1, 2, 3, 4):
+        n_questions = len(rows) * blocks
+        if n_questions < 5 or n_questions > 300:
+            continue
+        bubbles, used_blocks, matched = fit_bubble_grid(
+            candidates, n_questions, n_options, blocks
+        )
+        if not bubbles:
+            continue
+        score = (matched, n_questions)
+        if best is None or score > best[0]:
+            best = (score, n_questions, used_blocks)
+    if best is None:
+        return None
+    return {
+        "n_questions": best[1],
+        "n_blocks": best[2],
+        "matched": best[0][0],
+    }
+
+
 def _ring_profile_score(gray, bubbles, bins=72):
     """Ukur kemerataan tinta melingkar pada tiap sel grid.
 
@@ -1092,6 +1135,16 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
             cell_mode = "letter"
             mark_gain = 2.5
 
+    success = len(ordered["bubbles"]) == expected
+    if not success:
+        suggestion = _suggest_layout(candidates, n_options)
+        if suggestion and suggestion["n_questions"] != n_questions:
+            ordered["warnings"].append(
+                f"Lembar ini tampaknya berisi {suggestion['n_questions']} soal × "
+                f"{n_options} opsi ({suggestion['n_blocks']} blok). "
+                "Sesuaikan jumlah soal pada formulir lalu klik Deteksi Ulang."
+            )
+
     preview = render_preview(
         image_bgr,
         ordered["bubbles"],
@@ -1105,5 +1158,5 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
         "cell_mode": cell_mode,
         "mark_gain": mark_gain,
         **ordered,
-        "success": len(ordered["bubbles"]) == expected,
+        "success": success,
     }

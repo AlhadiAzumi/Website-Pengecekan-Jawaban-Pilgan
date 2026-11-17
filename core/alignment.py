@@ -67,6 +67,30 @@ def preprocess_debug(image):
     return gray, blur, _edge_map(gray)
 
 
+# Rasio sisi pendek/panjang lembar A4 sekitar 0.71 (potret) atau 1.41
+# (lanskap). Foto yang miring masih wajar dalam rentang ini, tetapi kotak
+# sempit di dalam lembar (mis. kolom tabel) harus ditolak agar tidak dipotong
+# sebagai "kertas".
+PAPER_ASPECT_RANGE = (0.40, 2.50)
+
+
+def _is_plausible_paper_shape(quad):
+    points = order_points(quad)
+    width = max(
+        np.linalg.norm(points[0] - points[1]),
+        np.linalg.norm(points[2] - points[3]),
+    )
+    height = max(
+        np.linalg.norm(points[0] - points[3]),
+        np.linalg.norm(points[1] - points[2]),
+    )
+    if width <= 1.0 or height <= 1.0:
+        return False
+    aspect = width / height
+    low, high = PAPER_ASPECT_RANGE
+    return low <= aspect <= high
+
+
 def detect_paper_corners(image):
     """Cari kontur kertas terbesar yang menyerupai segi empat."""
     resized, scale = _resize_long_side(image, 1000)
@@ -83,9 +107,12 @@ def detect_paper_corners(image):
             continue
         peri = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            best = approx
-            break
+        if len(approx) != 4 or not cv2.isContourConvex(approx):
+            continue
+        if not _is_plausible_paper_shape(approx):
+            continue
+        best = approx
+        break
     debug = {"edges": edged}
     if best is None:
         return None, debug
