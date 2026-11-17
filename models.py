@@ -135,6 +135,7 @@ class ScanResult(db.Model):
     threshold_method = db.Column(db.String(40))
     morph_kernel = db.Column(db.Integer)
     fill_ratio = db.Column(db.Float)
+    mark_style = db.Column(db.String(32), default="semua")
     correct = db.Column(db.Integer, default=0)
     wrong = db.Column(db.Integer, default=0)
     empty = db.Column(db.Integer, default=0)

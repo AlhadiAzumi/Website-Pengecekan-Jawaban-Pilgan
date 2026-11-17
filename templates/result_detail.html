@@ -26,6 +26,14 @@
 {% if result.quality_warning %}
 <div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-1"></i>{{ result.quality_warning }}</div>
 {% endif %}
+{% set style = mark_styles.get(result.mark_style, mark_styles['semua']) %}
+<div class="alert {{ 'alert-warning' if result.mark_style == 'silang' else 'alert-info' }} d-flex align-items-start gap-2">
+  <i class="bi {{ 'bi-exclamation-triangle-fill' if result.mark_style == 'silang' else 'bi-info-circle-fill' }} mt-1"></i>
+  <div>
+    <strong>Mode instruksi: {{ style.label }}</strong>
+    <div class="small">{{ style.instruction }}</div>
+  </div>
+</div>
 
 <div class="row g-3 mb-4">
   <div class="col-lg-4">

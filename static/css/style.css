@@ -420,6 +420,35 @@ h1, h2, h3, h4, h5, h6 {
   color: #b42318;
 }
 
+/* ---------- Notifikasi mode instruksi ---------- */
+.mode-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border-left: 4px solid var(--brand);
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.mode-notice i {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.mode-notice-warn {
+  border-left-color: #f59e0b;
+  background: #fff6e5;
+  color: #92400e;
+}
+
+.mode-notice strong {
+  font-weight: 700;
+}
+
 /* ---------- Modals ---------- */
 .modal-content {
   border: 0;

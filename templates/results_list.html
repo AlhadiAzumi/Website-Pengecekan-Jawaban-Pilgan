@@ -18,6 +18,16 @@
   <a href="{{ url_for('results_list') }}" class="btn btn-sm btn-outline-primary">Tampilkan semua</a>
 </div>
 {% endif %}
+{% if filters.batch and batch_mark_style %}
+{% set batch_style = mark_styles.get(batch_mark_style, mark_styles['semua']) %}
+<div class="alert {{ 'alert-warning' if batch_mark_style == 'silang' else 'alert-info' }} d-flex align-items-start gap-2">
+  <i class="bi {{ 'bi-exclamation-triangle-fill' if batch_mark_style == 'silang' else 'bi-info-circle-fill' }} mt-1"></i>
+  <div>
+    <strong>Mode instruksi batch ini: {{ batch_style.label }}</strong>
+    <div class="small">{{ batch_style.instruction }}</div>
+  </div>
+</div>
+{% endif %}
 
 <div class="row g-3 mb-4">
   <div class="col-6 col-lg-3">

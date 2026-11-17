@@ -102,6 +102,11 @@
               {% endfor %}
             </select>
             <div class="form-text" id="scanMarkHint">{{ mark_styles[settings.mark_style].instruction if settings.mark_style in mark_styles else mark_styles['semua'].instruction }}</div>
+            {% set current_style = mark_styles.get(settings.mark_style, mark_styles['semua']) %}
+            <div class="mode-notice mt-2{{ ' mode-notice-warn' if settings.mark_style == 'silang' }}" id="scanMarkNotice" role="status" aria-live="polite">
+              <i class="bi {{ 'bi-exclamation-triangle-fill' if settings.mark_style == 'silang' else 'bi-info-circle-fill' }}" id="scanMarkNoticeIcon" aria-hidden="true"></i>
+              <span>Mode instruksi: <strong id="scanMarkNoticeLabel">{{ current_style.label }}</strong><span id="scanMarkNoticeText">. {{ current_style.instruction }}</span></span>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" for="fillRatio">Ambang area piksel (fill ratio)</label>
@@ -341,11 +346,23 @@
 
   const markStyle = document.getElementById("scanMarkStyle");
   const markHint = document.getElementById("scanMarkHint");
+  const markNotice = document.getElementById("scanMarkNotice");
+  const markNoticeIcon = document.getElementById("scanMarkNoticeIcon");
+  const markNoticeLabel = document.getElementById("scanMarkNoticeLabel");
+  const markNoticeText = document.getElementById("scanMarkNoticeText");
   function syncMarkStyle(updateFill) {
     if (!markStyle) return;
     const option = markStyle.options[markStyle.selectedIndex];
     if (!option) return;
-    if (markHint) markHint.textContent = option.dataset.instruction || "";
+    const instruction = option.dataset.instruction || "";
+    if (markHint) markHint.textContent = instruction;
+    if (markNotice) {
+      const isSilang = markStyle.value === "silang";
+      markNotice.classList.toggle("mode-notice-warn", isSilang);
+      markNoticeIcon.className = "bi " + (isSilang ? "bi-exclamation-triangle-fill" : "bi-info-circle-fill");
+      markNoticeLabel.textContent = option.textContent.trim();
+      markNoticeText.textContent = ". " + instruction;
+    }
     if (updateFill && fillRatio && option.dataset.fill) {
       fillRatio.value = option.dataset.fill;
       fillRatio.dispatchEvent(new Event("input", { bubbles: true }));

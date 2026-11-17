@@ -22,7 +22,7 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from config import (
     DATABASE_URL,
@@ -174,6 +174,22 @@ def safe_redirect_target(target):
     return target
 
 
+def ensure_scan_result_schema():
+    """Tambahkan kolom baru pada database lama tanpa menghapus data."""
+    inspector = inspect(db.engine)
+    if "scan_results" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("scan_results")}
+    if "mark_style" not in columns:
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE scan_results "
+                    "ADD COLUMN mark_style VARCHAR(32) DEFAULT 'semua'"
+                )
+            )
+
+
 def create_app():
     app = Flask(__name__)
     app.config.update(
@@ -191,6 +207,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        ensure_scan_result_schema()
         seed_settings()
 
     @app.route("/healthz")
@@ -1037,6 +1054,7 @@ def create_app():
                                         threshold_method=pipeline["threshold_label"],
                                         morph_kernel=params["morph_kernel"],
                                         fill_ratio=params["fill_ratio"],
+                                        mark_style=mark_style,
                                         correct=pipeline["correct"],
                                         wrong=pipeline["wrong"],
                                         empty=pipeline["empty"],
@@ -1115,6 +1133,12 @@ def create_app():
                                         else ""
                                     ),
                                     "success",
+                                )
+                                flash(
+                                    "Mode instruksi aktif: "
+                                    f"{style_info['label']}. "
+                                    f"{style_info['instruction']}",
+                                    "warning" if mark_style == "silang" else "info",
                                 )
                             for failure in failures[:6]:
                                 flash(failure, "danger")
@@ -1203,6 +1227,11 @@ def create_app():
         active_filters = {
             key: value for key, value in filters.items() if value
         }
+        batch_mark_style = None
+        if filters["batch"] and results:
+            styles = {row.mark_style for row in results if row.mark_style}
+            if len(styles) == 1:
+                batch_mark_style = styles.pop()
         return render_template(
             "results_list.html",
             results=results,
@@ -1210,6 +1239,8 @@ def create_app():
             summary=_result_summary(results),
             templates=templates,
             export_url=url_for("results_export", **active_filters),
+            mark_styles=MARK_STYLES,
+            batch_mark_style=batch_mark_style,
         )
 
     @app.route("/results/export.xlsx")
@@ -1244,7 +1275,10 @@ def create_app():
             db.session.commit()
         steps = debug_items(completed)
         return render_template(
-            "result_detail.html", result=result, debug_items=steps
+            "result_detail.html",
+            result=result,
+            debug_items=steps,
+            mark_styles=MARK_STYLES,
         )
 
     @app.route("/results/<int:result_id>/export.xlsx")
