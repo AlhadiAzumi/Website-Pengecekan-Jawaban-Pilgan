@@ -117,14 +117,8 @@ def _hough_candidates(gray, params, permissive=False, param2=None):
     return candidates
 
 
-def _letter_line_rows(image_bgr, n_options, n_blocks, params):
-    """Deteksi baris huruf opsi pada lembar yang tidak punya bulatan cetak.
-
-    Lembar seperti ini hanya mencetak huruf A-E, lalu mahasiswa melingkari
-    huruf. Nomor soal dipisahkan dari kolom jawaban oleh celah horizontal
-    terbesar pada tiap baris, sehingga tiap blok menyisakan tepat n_options
-    huruf jawaban.
-    """
+def _letter_glyphs(image_bgr, params):
+    """Kumpulkan glyph huruf kecil untuk lembar tanpa bulatan cetak."""
     gray = (
         cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
         if image_bgr.ndim == 3
@@ -165,8 +159,19 @@ def _letter_line_rows(image_bgr, n_options, n_blocks, params):
                 "source": "letter",
             }
         )
-
     glyphs.sort(key=lambda item: item["y"])
+    return glyphs
+
+
+def _letter_line_rows(image_bgr, n_options, n_blocks, params):
+    """Deteksi baris huruf opsi pada lembar yang tidak punya bulatan cetak.
+
+    Lembar seperti ini hanya mencetak huruf A-E, lalu mahasiswa melingkari
+    huruf. Nomor soal dipisahkan dari kolom jawaban oleh celah horizontal
+    terbesar pada tiap baris, sehingga tiap blok menyisakan tepat n_options
+    huruf jawaban.
+    """
+    glyphs = _letter_glyphs(image_bgr, params)
     clusters = []
     for glyph in glyphs:
         if not clusters or glyph["y"] - clusters[-1][-1]["y"] > 6:
@@ -246,6 +251,148 @@ def _order_letter_grid(image_bgr, n_questions, n_options, blocks_to_try, params)
             bubble["radius"] = float(radius)
         return bubbles, blocks
     return None, None
+
+
+def _fit_variable_letter_blocks(
+    image_bgr, n_options, n_blocks=None, expected_questions=None, params=None
+):
+    """Susun huruf jawaban walau tinggi blok tidak sama (mis. 20+20+10)."""
+    params = params or {}
+    glyphs = _letter_glyphs(image_bgr, params)
+    if not glyphs:
+        return None
+
+    clusters = []
+    for glyph in glyphs:
+        if not clusters or glyph["y"] - clusters[-1][-1]["y"] > 6:
+            clusters.append([glyph])
+        else:
+            clusters[-1].append(glyph)
+    clusters = [
+        sorted(cluster, key=lambda item: item["x"])
+        for cluster in clusters
+        if len(cluster) >= n_options
+    ]
+    if len(clusters) < 3:
+        return None
+
+    def split_row(cluster, blocks):
+        gaps = np.diff([item["x"] for item in cluster])
+        if len(gaps) == 0:
+            return None
+        median_gap = float(np.median(gaps))
+        splits = []
+        for index in np.argsort(gaps)[::-1]:
+            if len(splits) >= blocks - 1:
+                break
+            if gaps[index] > max(2.2 * median_gap, 55.0):
+                splits.append(int(index))
+        if len(splits) != blocks - 1:
+            return None
+        splits.sort()
+        segments, start = [], 0
+        for split in splits:
+            segments.append(cluster[start : split + 1])
+            start = split + 1
+        segments.append(cluster[start:])
+        if any(len(segment) < n_options for segment in segments):
+            return None
+        return [segment[-n_options:] for segment in segments]
+
+    blocks_to_try = [int(n_blocks)] if n_blocks else [1, 2, 3, 4]
+    candidates = sorted(clusters, key=len, reverse=True)[:6]
+    best = None
+    for blocks in blocks_to_try:
+        reference = None
+        for cluster in candidates:
+            segments = split_row(cluster, blocks)
+            if segments is not None:
+                reference = segments
+                break
+        if reference is None:
+            continue
+        positions = [sorted(item["x"] for item in segment) for segment in reference]
+        column_steps = []
+        for block_positions in positions:
+            column_steps.extend(np.diff(block_positions).tolist())
+        step = float(np.median(column_steps)) if column_steps else 20.0
+        if step <= 0:
+            continue
+        x_tolerance = max(8.0, step * 0.35)
+
+        block_rows = [[] for _ in range(blocks)]
+        matched = 0
+        for cluster in clusters:
+            row_y = float(np.median([item["y"] for item in cluster]))
+            for block_index, block_positions in enumerate(positions):
+                chosen = []
+                for x in block_positions:
+                    picked = None
+                    best_distance = None
+                    for item in cluster:
+                        if abs(item["x"] - x) > x_tolerance:
+                            continue
+                        distance = abs(item["x"] - x)
+                        if best_distance is None or distance < best_distance:
+                            best_distance = distance
+                            picked = item
+                    chosen.append(picked)
+                found = sum(1 for item in chosen if item is not None)
+                if found < max(2, n_options - 1):
+                    continue
+                matched += found
+                block_rows[block_index].append((row_y, chosen))
+
+        rows_per_block = [len(rows) for rows in block_rows]
+        total_rows = sum(rows_per_block)
+        if total_rows < 5:
+            continue
+        if expected_questions is not None and total_rows != expected_questions:
+            continue
+        total_cells = total_rows * n_options
+        coverage = matched / float(max(1, total_cells))
+        if coverage < 0.50:
+            continue
+
+        row_ys = []
+        for rows in block_rows:
+            ys = [row_y for row_y, _ in rows]
+            row_ys.extend(np.diff(ys).tolist())
+        row_step = float(np.median(row_ys)) if row_ys else step
+        min_step = min(column_steps) if column_steps else step
+        radius = max(6.0, min(row_step * 0.5, min_step * 0.42))
+
+        bubbles = []
+        question_no = 0
+        for block_index, rows in enumerate(block_rows):
+            rows.sort(key=lambda row: row[0])
+            for row_index, (row_y, chosen) in enumerate(rows):
+                question_no += 1
+                for option_index, x in enumerate(positions[block_index]):
+                    picked = chosen[option_index]
+                    bubble_x = float(picked["x"]) if picked is not None else float(x)
+                    bubble_y = float(picked["y"]) if picked is not None else row_y
+                    bubbles.append(
+                        {
+                            "question_no": question_no,
+                            "option_index": option_index,
+                            "option_label": chr(ord("A") + option_index),
+                            "x": bubble_x,
+                            "y": bubble_y,
+                            "radius": float(radius),
+                            "row_index": row_index,
+                            "block_index": block_index,
+                        }
+                    )
+        if len(bubbles) != total_rows * n_options:
+            continue
+        score = (matched, total_rows, coverage)
+        if best is None or score > best[0]:
+            best = (score, bubbles, blocks, rows_per_block)
+
+    if best is None:
+        return None
+    return best[1], best[2], best[3]
 
 
 def detect_bubble_candidates(image_bgr, params):
@@ -835,46 +982,178 @@ def fit_bubble_grid(candidates, n_questions, n_options, n_blocks=None):
     return best[1], best[2], best[0][0]
 
 
-def _suggest_layout(candidates, n_options):
-    """Tebak jumlah soal/blok dari grid kandidat bila input pengguna meleset.
+def _fit_variable_blocks(candidates, n_options, n_blocks=None, expected_questions=None):
+    """Susun grid jawaban walau tiap blok tidak sama tinggi.
 
-    Foto lembar sering sudah terlihat jelas tetapi pengguna salah mengisi
-    jumlah soal. Fungsi ini mencoba beberapa kelipatan jumlah baris yang
-    terdeteksi dan mengembalikan susunan yang paling banyak mencocokkan
-    kandidat, supaya pesan kesalahan bisa memberi saran yang konkret.
+    Lembar nyata kadang membagi soal menjadi blok 20 + 20 + 10, sehingga
+    jumlah soal tidak habis dibagi jumlah blok. Fungsi ini memisahkan kolom
+    per blok, menghitung baris pada masing-masing blok, lalu memberi nomor
+    soal berurutan dari blok kiri ke kanan.
+
+    Kembalikan ``dict`` berisi bubbles, jumlah blok, dan jumlah baris tiap
+    blok, atau ``None`` bila grid belum cukup yakin.
     """
     if not candidates:
         return None
     radii = [item["radius"] for item in candidates]
     median_radius = float(np.median(radii)) if radii else 8.0
     tolerance = max(7.0, median_radius * 1.35)
-    rows = [
-        row
-        for row in _cluster_1d(candidates, "y", max(5.0, tolerance * 0.85))
-        if len(row) >= max(3, n_options - 1)
-    ]
-    if not 5 <= len(rows) <= 150:
+    columns = _cluster_1d(candidates, "x", max(5.0, tolerance * 0.75))
+    columns = [column for column in columns if len(column) >= 2]
+    columns.sort(key=lambda column: float(np.mean([item["x"] for item in column])))
+    if len(columns) < n_options:
         return None
+    centers = [float(np.mean([item["x"] for item in column])) for column in columns]
+    counts = [len(column) for column in columns]
 
+    blocks_to_try = [int(n_blocks)] if n_blocks else [1, 2, 3, 4]
     best = None
-    for blocks in (1, 2, 3, 4):
-        n_questions = len(rows) * blocks
-        if n_questions < 5 or n_questions > 300:
+    for blocks in blocks_to_try:
+        segments = _split_column_segments(centers, blocks, n_options)
+        if segments is None:
             continue
-        bubbles, used_blocks, matched = fit_bubble_grid(
-            candidates, n_questions, n_options, blocks
-        )
-        if not bubbles:
+        rows_needed = max(counts)
+        cells = []
+        matched = 0
+        rows_per_block = []
+        valid = True
+        for block_index, (start, end) in enumerate(segments):
+            n_columns = end - start + 1
+            if n_columns < n_options:
+                valid = False
+                break
+            if n_columns == n_options:
+                # Tidak ada kolom nomor soal tambahan.
+                positions = centers[start : end + 1]
+            elif n_columns == n_options + 1:
+                # Umumnya kolom paling kiri berisi nomor soal, bukan opsi.
+                positions = centers[start + 1 : end + 1]
+            else:
+                fit = _fit_column_lattice(
+                    centers, counts, start, end, n_options, rows_needed
+                )
+                if fit is None or fit[2] < max(2, n_options - 1):
+                    valid = False
+                    break
+                positions = sorted(fit[1])
+            if len(positions) < n_options:
+                valid = False
+                break
+            steps = np.diff(positions)
+            step = float(np.median(steps)) if len(steps) else 0.0
+            if step <= 0:
+                valid = False
+                break
+            x_tolerance = max(6.0, step * 0.30)
+            block_candidates = [
+                item
+                for item in candidates
+                if any(abs(item["x"] - x) <= x_tolerance for x in positions)
+            ]
+            if not block_candidates:
+                valid = False
+                break
+            rows = _cluster_1d(
+                block_candidates, "y", max(5.0, tolerance * 0.85)
+            )
+            min_cells = max(2, (n_options + 1) // 2)
+            rows = [row for row in rows if len(row) >= min_cells]
+            rows.sort(key=lambda row: float(np.median([item["y"] for item in row])))
+            if len(rows) < 2:
+                valid = False
+                break
+            row_ys = [float(np.median([item["y"] for item in row])) for row in rows]
+            y_gaps = np.diff(row_ys)
+            y_step = float(np.median(y_gaps)) if len(y_gaps) else step
+            y_tolerance = max(6.0, y_step * 0.35)
+            block_cells = []
+            for row_index, (row, row_y) in enumerate(zip(rows, row_ys)):
+                for option_index, x in enumerate(positions):
+                    chosen = None
+                    best_distance = None
+                    for item in row:
+                        if abs(item["x"] - x) > x_tolerance:
+                            continue
+                        if abs(item["y"] - row_y) > y_tolerance:
+                            continue
+                        distance = math.hypot(item["x"] - x, item["y"] - row_y)
+                        if best_distance is None or distance < best_distance:
+                            best_distance = distance
+                            chosen = item
+                    if chosen is not None:
+                        matched += 1
+                        bubble = {
+                            "x": float(chosen["x"]),
+                            "y": float(chosen["y"]),
+                            "radius": float(chosen["radius"]),
+                        }
+                    else:
+                        bubble = {
+                            "x": float(x),
+                            "y": float(row_y),
+                            "radius": float(median_radius),
+                        }
+                    bubble.update(
+                        {
+                            "option_index": option_index,
+                            "option_label": chr(ord("A") + option_index),
+                            "row_index": row_index,
+                            "block_index": block_index,
+                        }
+                    )
+                    block_cells.append(bubble)
+            cells.append(block_cells)
+            rows_per_block.append(len(rows))
+
+        if not valid:
             continue
-        score = (matched, n_questions)
+        total_rows = sum(rows_per_block)
+        if total_rows < 5:
+            continue
+        if expected_questions is not None and total_rows != expected_questions:
+            continue
+        total_cells = total_rows * n_options
+        coverage = matched / float(max(1, total_cells))
+        if coverage < 0.55:
+            continue
+
+        bubble_list = []
+        question_no = 0
+        for block_cells in cells:
+            block_cells.sort(
+                key=lambda item: (item["row_index"], item["option_index"])
+            )
+            for bubble in block_cells:
+                if bubble["option_index"] == 0:
+                    question_no += 1
+                bubble["question_no"] = question_no
+                bubble_list.append(bubble)
+
+        score = (matched, total_rows, coverage)
         if best is None or score > best[0]:
-            best = (score, n_questions, used_blocks)
+            best = (score, bubble_list, blocks, rows_per_block, coverage)
+
     if best is None:
         return None
     return {
-        "n_questions": best[1],
+        "bubbles": best[1],
         "n_blocks": best[2],
+        "rows_per_block": best[3],
         "matched": best[0][0],
+        "coverage": best[4],
+    }
+
+
+def _suggest_layout(candidates, n_options):
+    """Tebak susunan soal dari grid kandidat bila input pengguna meleset."""
+    result = _fit_variable_blocks(candidates, n_options)
+    if result is None:
+        return None
+    return {
+        "n_questions": sum(result["rows_per_block"]),
+        "n_blocks": result["n_blocks"],
+        "rows_per_block": result["rows_per_block"],
+        "matched": result["matched"],
     }
 
 
@@ -1053,6 +1332,25 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
     cell_mode = "bubble"
     mark_gain = 1.0
 
+    # Blok tidak harus sama tinggi (mis. 20 + 20 + 10 soal). Coba susun
+    # per blok sebelum fallback Hough, lalu pakai bila grid lama tidak utuh
+    # atau ternyata tinggi bloknya berbeda.
+    variable = _fit_variable_blocks(
+        candidates, n_options, n_blocks, expected_questions=n_questions
+    )
+    if variable is not None:
+        uneven_rows = len(set(variable["rows_per_block"])) > 1
+        if len(ordered["bubbles"]) < expected or uneven_rows:
+            ordered = {
+                "bubbles": variable["bubbles"],
+                "expected": expected,
+                "detected": len(candidates),
+                "n_blocks": variable["n_blocks"],
+                "strategy": "grid",
+                "warnings": [],
+                "rows_info": variable["rows_per_block"],
+            }
+
     # Bila kontur gagal membentuk grid, coba kandidat HoughCircles sebagai cadangan.
     if len(ordered["bubbles"]) < expected:
         hough = _filter_dominant_size(
@@ -1068,6 +1366,7 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
     # hilang diisi dari jarak baris/kolom yang sudah terdeteksi.
     if len(ordered["bubbles"]) < expected:
         best_grid = None
+        best_variable = None
         pools = []
         strict_hough = _filter_dominant_size(
             _deduplicate(_hough_candidates(debug["grayscale"], params))
@@ -1088,6 +1387,15 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
             if extra:
                 pools.append(_deduplicate(candidates + extra))
         for pool in pools:
+            variable = _fit_variable_blocks(
+                pool, n_options, n_blocks, expected_questions=n_questions
+            )
+            if variable is not None and (
+                best_variable is None
+                or variable["matched"] > best_variable[0]["matched"]
+            ):
+                best_variable = (variable, pool)
+
             grid_bubbles, grid_blocks, grid_matched = fit_bubble_grid(
                 pool, n_questions, n_options, n_blocks
             )
@@ -1099,7 +1407,22 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
                 continue
             if best_grid is None or grid_matched > best_grid[0]:
                 best_grid = (grid_matched, grid_bubbles, grid_blocks, pool)
-        if best_grid is not None:
+        if best_variable is not None and (
+            best_grid is None
+            or len(set(best_variable[0]["rows_per_block"])) > 1
+        ):
+            variable, pool = best_variable
+            ordered = {
+                "bubbles": variable["bubbles"],
+                "expected": expected,
+                "detected": len(pool),
+                "n_blocks": variable["n_blocks"],
+                "strategy": "grid",
+                "warnings": [],
+                "rows_info": variable["rows_per_block"],
+            }
+            candidates = pool
+        elif best_grid is not None:
             _, grid_bubbles, grid_blocks, pool = best_grid
             ordered = {
                 "bubbles": grid_bubbles,
@@ -1119,9 +1442,25 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
         blocks_to_try = (
             [int(n_blocks)] if n_blocks else _divisors(n_questions)
         )
-        letter_bubbles, used_blocks = _order_letter_grid(
-            image_bgr, n_questions, n_options, blocks_to_try, params
+        # Lembar huruf juga bisa punya blok tidak rata (mis. 20+20+10).
+        # Coba susunan per blok lebih dulu; bila tinggi bloknya ternyata sama,
+        # pakai jalur biasa supaya perilaku lembar huruf lama tidak berubah.
+        letter_rows = None
+        variable_letters = _fit_variable_letter_blocks(
+            image_bgr,
+            n_options,
+            n_blocks,
+            expected_questions=n_questions,
+            params=params,
         )
+        if variable_letters is not None and len(set(variable_letters[2])) > 1:
+            letter_bubbles, used_blocks, letter_rows = variable_letters
+        else:
+            letter_bubbles, used_blocks = _order_letter_grid(
+                image_bgr, n_questions, n_options, blocks_to_try, params
+            )
+            if not letter_bubbles and variable_letters is not None:
+                letter_bubbles, used_blocks, letter_rows = variable_letters
         if letter_bubbles:
             ordered = {
                 "bubbles": letter_bubbles,
@@ -1130,7 +1469,7 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
                 "n_blocks": used_blocks,
                 "strategy": "letters",
                 "warnings": [],
-                "rows_info": None,
+                "rows_info": letter_rows,
             }
             cell_mode = "letter"
             mark_gain = 2.5
@@ -1138,12 +1477,39 @@ def detect_template(image_bgr, n_questions, n_options, n_blocks, params):
     success = len(ordered["bubbles"]) == expected
     if not success:
         suggestion = _suggest_layout(candidates, n_options)
-        if suggestion and suggestion["n_questions"] != n_questions:
-            ordered["warnings"].append(
-                f"Lembar ini tampaknya berisi {suggestion['n_questions']} soal × "
-                f"{n_options} opsi ({suggestion['n_blocks']} blok). "
-                "Sesuaikan jumlah soal pada formulir lalu klik Deteksi Ulang."
+        if suggestion is None:
+            # Lembar huruf tidak punya kandidat bulatan, jadi tebak susunan
+            # langsung dari glyph hurufnya.
+            variable_letters = _fit_variable_letter_blocks(
+                image_bgr, n_options, None, expected_questions=None, params=params
             )
+            if variable_letters is not None:
+                _, _, letter_rows = variable_letters
+                suggestion = {
+                    "n_questions": sum(letter_rows),
+                    "n_blocks": len(letter_rows),
+                    "rows_per_block": letter_rows,
+                }
+        if suggestion:
+            wrong_questions = suggestion["n_questions"] != n_questions
+            wrong_blocks = bool(n_blocks) and suggestion["n_blocks"] != int(n_blocks)
+            if wrong_questions or wrong_blocks:
+                rows = suggestion.get("rows_per_block") or []
+                detail = " + ".join(str(value) for value in rows)
+                block_info = f"{suggestion['n_blocks']} blok"
+                if detail:
+                    block_info += f": {detail} soal"
+                if wrong_questions and wrong_blocks:
+                    target = "jumlah soal dan blok"
+                elif wrong_blocks:
+                    target = "jumlah blok"
+                else:
+                    target = "jumlah soal"
+                ordered["warnings"].append(
+                    f"Lembar ini tampaknya berisi {suggestion['n_questions']} soal × "
+                    f"{n_options} opsi ({block_info}). "
+                    f"Sesuaikan {target} pada formulir lalu klik Deteksi Ulang."
+                )
 
     preview = render_preview(
         image_bgr,

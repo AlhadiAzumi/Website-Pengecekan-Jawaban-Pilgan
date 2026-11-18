@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Pilih Mode Pemeriksaan &middot; {{ app_title }}{% endblock %}
+{% block content %}
+<section class="mode-hero">
+  <span class="badge text-bg-light mb-2"><i class="bi bi-1-circle me-1"></i>Langkah awal</span>
+  <h1>Pilih mode pemeriksaan</h1>
+  <p class="lead mb-0">
+    Mode menentukan cara menjawab yang diperiksa sekaligus memisahkan data.
+    Templat, paket kunci, dan hasil pada tiap mode tidak tercampur dengan mode lain.
+  </p>
+  {% if active_style %}
+  <div class="mode-hero-current">
+    <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+    <span>Mode aktif sekarang: <strong>{{ active_style.label }}</strong>. Pilih mode lain untuk berpindah lingkungan.</span>
+  </div>
+  {% endif %}
+</section>
+
+<form method="post" action="{{ url_for('mode_select') }}">
+  <input type="hidden" name="next" value="{{ next_url or '' }}">
+  <div class="row g-3 mt-1">
+    {% for key, info in mark_styles.items() %}
+    {% set icons = {
+      'semua': 'bi-shuffle',
+      'silang': 'bi-x-lg',
+      'bulat': 'bi-circle',
+      'bulat_hitam': 'bi-circle-fill'
+    } %}
+    <div class="col-md-6">
+      {% set is_selected = (active_mark_style == key) or (not active_mark_style and key == 'semua') %}
+      <label class="mode-card {{ 'mode-card-active' if is_selected }}">
+        <input type="radio" name="mark_style" value="{{ key }}"
+               {{ 'checked' if is_selected }}>
+        <span class="mode-card-icon {{ 'mode-icon-warn' if key == 'silang' }}">
+          <i class="bi {{ icons.get(key, 'bi-check2') }}" aria-hidden="true"></i>
+        </span>
+        <span class="mode-card-body">
+          <strong>{{ info.label }}</strong>
+          <span>{{ info.instruction }}</span>
+          <small>Ambang awal fill ratio: {{ "%.2f"|format(info.fill_ratio) }}</small>
+        </span>
+        <span class="mode-card-check" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></span>
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex flex-wrap align-items-center gap-2 mt-4">
+    <button type="submit" class="btn btn-primary btn-lg">
+      <i class="bi bi-box-arrow-in-right me-1"></i>Masuk ke mode ini
+    </button>
+    {% if active_style %}
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Batal</a>
+    <span class="text-muted-sm">Data yang tampil akan mengikuti mode yang dipilih.</span>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

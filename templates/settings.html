@@ -59,16 +59,17 @@
         <div class="card-header"><i class="bi bi-bullseye me-1"></i>Deteksi Bulatan &amp; Pembacaan</div>
         <div class="card-body">
           <div class="mb-3">
-            <label class="form-label fw-semibold" for="markStyle">Instruksi cara menjawab</label>
-            <select class="form-select" id="markStyle" name="mark_style">
-              {% for key, info in mark_styles.items() %}
-              <option value="{{ key }}"
-                      data-fill="{{ info.fill_ratio }}"
-                      data-instruction="{{ info.instruction }}"
-                      {{ 'selected' if settings.mark_style == key }}>{{ info.label }}</option>
-              {% endfor %}
-            </select>
-            <div class="form-text" id="markStyleHint">{{ mark_styles[settings.mark_style].instruction if settings.mark_style in mark_styles else mark_styles['semua'].instruction }}</div>
+            <label class="form-label fw-semibold">Mode pemeriksaan aktif</label>
+            {% if active_style %}
+            <div class="mode-notice{{ ' mode-notice-warn' if active_mark_style == 'silang' }}">
+              <i class="bi {{ 'bi-exclamation-triangle-fill' if active_mark_style == 'silang' else 'bi-info-circle-fill' }}" aria-hidden="true"></i>
+              <span>Mode: <strong>{{ active_style.label }}</strong>. {{ active_style.instruction }}</span>
+            </div>
+            <div class="form-text mt-2">
+              Mode dipilih di awal dan memisahkan templat, kunci, serta hasil.
+              <a href="{{ url_for('mode_select', next=request.path) }}">Ganti mode</a>.
+            </div>
+            {% endif %}
           </div>
           <div class="mb-3">
             <div class="d-flex justify-content-between">
@@ -202,28 +203,4 @@
     </div>
   </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-(function () {
-  var style = document.getElementById("markStyle");
-  var fill = document.getElementById("fillRatioInput");
-  var hint = document.getElementById("markStyleHint");
-  if (!style) return;
-
-  function apply(updateFill) {
-    var option = style.options[style.selectedIndex];
-    if (!option) return;
-    if (hint) hint.textContent = option.dataset.instruction || "";
-    if (updateFill && fill && option.dataset.fill) {
-      fill.value = option.dataset.fill;
-      fill.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  }
-
-  style.addEventListener("change", function () { apply(true); });
-  apply(false);
-})();
-</script>
 {% endblock %}

@@ -4,8 +4,14 @@
 <section class="dash-hero">
   <div class="row g-4 align-items-start">
     <div class="col-lg-8">
+      {% if active_style %}
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <span class="badge text-bg-light"><i class="bi bi-layers-half me-1"></i>Mode: {{ active_style.label }}</span>
+        <a href="{{ url_for('mode_select', next=request.path) }}" class="small text-decoration-none">Ganti mode</a>
+      </div>
+      {% endif %}
       <h1 class="dash-title">Periksa Lembar Jawaban Pilihan Ganda</h1>
-      <p class="dash-sub">Buat templat dari lembar kosong, isi paket kunci jawaban, lalu scan banyak lembar sekaligus. Setiap tahap pengolahan citra dapat dilihat di halaman debug.</p>
+      <p class="dash-sub">{{ active_style.instruction if active_style else 'Buat templat dari lembar kosong, isi paket kunci jawaban, lalu scan banyak lembar sekaligus.' }}</p>
     </div>
     <div class="col-lg-4">
       <div class="dash-metrics">

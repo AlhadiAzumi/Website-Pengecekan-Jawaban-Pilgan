@@ -1594,3 +1594,174 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 1.25rem;
   }
 }
+
+/* ---------- Mode / tenant pemeriksaan ---------- */
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.7rem;
+  border: 1px solid #ddd3f4;
+  border-radius: 999px;
+  background: #f8f4ff;
+  color: var(--brand-dark);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.mode-pill:hover,
+.mode-pill.active {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-dark);
+}
+
+.mode-pill-label {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mode-pill-action {
+  padding-left: 0.35rem;
+  border-left: 1px solid #ddd3f4;
+  color: var(--brand);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mode-hero {
+  padding: 1.5rem 1.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #fbf8ff 0%, #f4f1f8 100%);
+}
+
+.mode-hero h1 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.mode-hero .lead {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.mode-hero-current {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.65rem 0.8rem;
+  border-left: 4px solid var(--success);
+  border-radius: 8px;
+  background: #e9f8f2;
+  color: #0b6b4c;
+  font-size: 0.88rem;
+}
+
+.mode-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  height: 100%;
+  padding: 1.1rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.mode-card:hover {
+  border-color: #cbb6ee;
+  box-shadow: 0 8px 22px rgba(52, 24, 110, 0.08);
+  transform: translateY(-1px);
+}
+
+.mode-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode-card-active {
+  border-color: var(--brand);
+  background: #fbf8ff;
+}
+
+.mode-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 1.25rem;
+}
+
+.mode-icon-warn {
+  background: #fff3e0;
+  color: var(--accent-dark);
+}
+
+.mode-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-right: 1.25rem;
+}
+
+.mode-card-body strong {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.mode-card-body span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.mode-card-body small {
+  color: #8a8398;
+  font-size: 0.75rem;
+}
+
+.mode-card-check {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.9rem;
+  color: var(--brand);
+  font-size: 1.1rem;
+  opacity: 0;
+}
+
+.mode-card-active .mode-card-check {
+  opacity: 1;
+}
+
+@media (max-width: 991.98px) {
+  .mode-nav {
+    width: 100%;
+  }
+
+  .mode-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .mode-pill-label {
+    max-width: none;
+  }
+}

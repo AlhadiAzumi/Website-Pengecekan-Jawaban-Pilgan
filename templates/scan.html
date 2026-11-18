@@ -92,27 +92,24 @@
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-semibold" for="scanMarkStyle">Instruksi cara menjawab</label>
-            <select class="form-select" id="scanMarkStyle" name="mark_style">
-              {% for key, info in mark_styles.items() %}
-              <option value="{{ key }}"
-                      data-fill="{{ info.fill_ratio }}"
-                      data-instruction="{{ info.instruction }}"
-                      {{ 'selected' if settings.mark_style == key }}>{{ info.label }}</option>
-              {% endfor %}
-            </select>
-            <div class="form-text" id="scanMarkHint">{{ mark_styles[settings.mark_style].instruction if settings.mark_style in mark_styles else mark_styles['semua'].instruction }}</div>
-            {% set current_style = mark_styles.get(settings.mark_style, mark_styles['semua']) %}
-            <div class="mode-notice mt-2{{ ' mode-notice-warn' if settings.mark_style == 'silang' }}" id="scanMarkNotice" role="status" aria-live="polite">
-              <i class="bi {{ 'bi-exclamation-triangle-fill' if settings.mark_style == 'silang' else 'bi-info-circle-fill' }}" id="scanMarkNoticeIcon" aria-hidden="true"></i>
-              <span>Mode instruksi: <strong id="scanMarkNoticeLabel">{{ current_style.label }}</strong><span id="scanMarkNoticeText">. {{ current_style.instruction }}</span></span>
+            <label class="form-label fw-semibold">Instruksi cara menjawab</label>
+            {% if active_style %}
+            <div class="mode-notice{{ ' mode-notice-warn' if active_mark_style == 'silang' }}" id="scanMarkNotice" role="status">
+              <i class="bi {{ 'bi-exclamation-triangle-fill' if active_mark_style == 'silang' else 'bi-info-circle-fill' }}" aria-hidden="true"></i>
+              <span>Mode: <strong>{{ active_style.label }}</strong>. {{ active_style.instruction }}</span>
             </div>
+            <div class="form-text mt-2">
+              Lingkungan scan mengikuti mode yang dipilih di awal.
+              <a href="{{ url_for('mode_select', next=request.path) }}">Ganti mode</a>.
+            </div>
+            {% endif %}
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" for="fillRatio">Ambang area piksel (fill ratio)</label>
             <div class="d-flex align-items-center gap-3">
-              <input type="range" class="form-range flex-grow-1" id="fillRatio" name="fill_ratio" min="0.05" max="0.95" step="0.01" value="{{ settings.fill_ratio }}">
-              <output class="badge text-bg-primary" id="fillRatioOut">{{ "%.2f"|format(settings.fill_ratio) }}</output>
+              <input type="range" class="form-range flex-grow-1" id="fillRatio" name="fill_ratio" min="0.05" max="0.95" step="0.01"
+                     value="{{ '%.2f'|format(active_style.fill_ratio if active_style else settings.fill_ratio) }}">
+              <output class="badge text-bg-primary" id="fillRatioOut">{{ '%.2f'|format(active_style.fill_ratio if active_style else settings.fill_ratio) }}</output>
             </div>
             <div class="form-text">Gunakan 0.20&ndash;0.30 untuk jawaban dilingkari/disilang tipis, 0.40&ndash;0.50 untuk dihitamkan penuh.</div>
           </div>
@@ -342,35 +339,6 @@
     const sync = function () { fillRatioOut.textContent = Number(fillRatio.value).toFixed(2); };
     fillRatio.addEventListener("input", sync);
     sync();
-  }
-
-  const markStyle = document.getElementById("scanMarkStyle");
-  const markHint = document.getElementById("scanMarkHint");
-  const markNotice = document.getElementById("scanMarkNotice");
-  const markNoticeIcon = document.getElementById("scanMarkNoticeIcon");
-  const markNoticeLabel = document.getElementById("scanMarkNoticeLabel");
-  const markNoticeText = document.getElementById("scanMarkNoticeText");
-  function syncMarkStyle(updateFill) {
-    if (!markStyle) return;
-    const option = markStyle.options[markStyle.selectedIndex];
-    if (!option) return;
-    const instruction = option.dataset.instruction || "";
-    if (markHint) markHint.textContent = instruction;
-    if (markNotice) {
-      const isSilang = markStyle.value === "silang";
-      markNotice.classList.toggle("mode-notice-warn", isSilang);
-      markNoticeIcon.className = "bi " + (isSilang ? "bi-exclamation-triangle-fill" : "bi-info-circle-fill");
-      markNoticeLabel.textContent = option.textContent.trim();
-      markNoticeText.textContent = ". " + instruction;
-    }
-    if (updateFill && fillRatio && option.dataset.fill) {
-      fillRatio.value = option.dataset.fill;
-      fillRatio.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  }
-  if (markStyle) {
-    markStyle.addEventListener("change", function () { syncMarkStyle(true); });
-    syncMarkStyle(false);
   }
 })();
 </script>

@@ -190,6 +190,22 @@ def ensure_scan_result_schema():
             )
 
 
+def ensure_template_schema():
+    """Tandai templat lama sebagai mode campuran agar tetap bisa diakses."""
+    inspector = inspect(db.engine)
+    if "templates" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("templates")}
+    if "mark_style" not in columns:
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE templates "
+                    "ADD COLUMN mark_style VARCHAR(32) DEFAULT 'semua'"
+                )
+            )
+
+
 def create_app():
     app = Flask(__name__)
     app.config.update(
@@ -208,7 +224,84 @@ def create_app():
     with app.app_context():
         db.create_all()
         ensure_scan_result_schema()
+        ensure_template_schema()
         seed_settings()
+
+    def _active_mark_style():
+        """Mode pemeriksaan yang dipilih di awal sesi, bila masih valid."""
+        style = session.get("mark_style")
+        return style if style in MARK_STYLES else None
+
+    def _template_mode_filter(query):
+        """Batasi query templat sesuai mode yang sedang aktif."""
+        style = _active_mark_style()
+        if not style:
+            return query
+        shared = db.or_(
+            Template.mark_style == "semua", Template.mark_style.is_(None)
+        )
+        if style == "semua":
+            return query.filter(shared)
+        return query.filter(
+            db.or_(Template.mark_style == style, shared)
+        )
+
+    def _visible_templates_query():
+        return _template_mode_filter(Template.query)
+
+    def _visible_keys_query():
+        return _template_mode_filter(
+            AnswerKey.query.join(Template, AnswerKey.template_id == Template.id)
+        )
+
+    def _results_mode_filter(query):
+        style = _active_mark_style()
+        if not style:
+            return query
+        return query.filter(
+            db.func.coalesce(ScanResult.mark_style, "semua") == style
+        )
+
+    def _template_is_visible(template):
+        style = _active_mark_style()
+        if template is None or not style:
+            return False
+        template_style = template.mark_style or "semua"
+        if style == "semua":
+            return template_style == "semua"
+        return template_style in {style, "semua"}
+
+    def _get_visible_template_or_404(template_id):
+        template = db.session.get(Template, template_id)
+        if not _template_is_visible(template):
+            abort(404)
+        return template
+
+    def _get_visible_key_or_404(key_id):
+        key = db.session.get(AnswerKey, key_id)
+        if key is None or not _template_is_visible(key.template):
+            abort(404)
+        return key
+
+    def _get_visible_result_or_404(result_id):
+        result = db.session.get(ScanResult, result_id)
+        if result is None:
+            abort(404)
+        style = _active_mark_style()
+        if style and (result.mark_style or "semua") != style:
+            abort(404)
+        return result
+
+    def _dashboard_stats():
+        scans = _results_mode_filter(ScanResult.query)
+        return (
+            {
+                "templates": _visible_templates_query().count(),
+                "keys": _visible_keys_query().count(),
+                "scans": scans.count(),
+            },
+            scans,
+        )
 
     @app.route("/healthz")
     def healthz():
@@ -234,6 +327,11 @@ def create_app():
         if session.get("auth_user") != account["username"]:
             target = request.full_path.rstrip("?") if request.method == "GET" else ""
             return redirect(url_for("login", next=target))
+        if request.endpoint in {"mode_select", "logout", "account_update"}:
+            return None
+        if _active_mark_style() is None:
+            target = request.full_path.rstrip("?") if request.method == "GET" else ""
+            return redirect(url_for("mode_select", next=target))
         return None
 
     @app.route("/login", methods=["GET", "POST"])
@@ -293,6 +391,30 @@ def create_app():
         flash("Anda sudah keluar dari aplikasi.", "info")
         return redirect(url_for("login"))
 
+    @app.route("/mode", methods=["GET", "POST"])
+    def mode_select():
+        """Pilih mode/tenant instruksi jawaban sebelum memakai aplikasi."""
+        next_url = safe_redirect_target(request.values.get("next", ""))
+        current = _active_mark_style()
+        if request.method == "POST":
+            style = request.form.get("mark_style", "")
+            if style not in MARK_STYLES:
+                flash("Pilih mode pemeriksaan yang tersedia.", "danger")
+            else:
+                session["mark_style"] = style
+                info = mark_style_info(style)
+                flash(
+                    f"Mode pemeriksaan aktif: {info['label']}. "
+                    f"{info['instruction']}",
+                    "warning" if style == "silang" else "info",
+                )
+                return redirect(next_url or url_for("index"))
+        return render_template(
+            "mode_select.html",
+            next_url=next_url or "",
+            active_mark_style=current,
+        )
+
     @app.route("/account", methods=["POST"])
     def account_update():
         account = get_account()
@@ -351,10 +473,17 @@ def create_app():
                     continue
             return str(int(latest))
 
+        active_mark_style = _active_mark_style()
         return {
             "app_title": APP_TITLE,
             "settings": get_settings(),
             "mark_styles": MARK_STYLES,
+            "active_mark_style": active_mark_style,
+            "active_style": (
+                mark_style_info(active_mark_style)
+                if active_mark_style
+                else None
+            ),
             "current_year": datetime.now().year,
             "asset_version": asset_version("css/style.css", "js/app.js"),
             "auth_page": request.endpoint == "login",
@@ -363,18 +492,13 @@ def create_app():
 
     @app.route("/")
     def index():
-        stats = {
-            "templates": Template.query.count(),
-            "keys": AnswerKey.query.count(),
-            "scans": ScanResult.query.count(),
-        }
-        recent = (
-            ScanResult.query.order_by(ScanResult.created_at.desc()).limit(8).all()
-        )
+        stats, scans = _dashboard_stats()
+        recent = scans.order_by(ScanResult.created_at.desc()).limit(8).all()
         average = None
         if stats["scans"]:
             average = (
-                db.session.query(db.func.avg(ScanResult.score)).scalar() or 0.0
+                scans.with_entities(db.func.avg(ScanResult.score)).scalar()
+                or 0.0
             )
         return render_template(
             "index.html", stats=stats, recent=recent, average=average
@@ -382,13 +506,18 @@ def create_app():
 
     @app.route("/templates")
     def templates_list():
-        templates = Template.query.order_by(Template.created_at.desc()).all()
+        templates = _visible_templates_query().order_by(
+            Template.created_at.desc()
+        ).all()
         return render_template("templates_list.html", templates=templates)
 
     @app.route("/templates/new", methods=["GET", "POST"])
     def template_new():
         settings = get_settings()
         if request.method == "GET":
+            style_info = mark_style_info(_active_mark_style() or "semua")
+            params = dict(settings)
+            params["fill_ratio"] = style_info["fill_ratio"]
             return render_template(
                 "template_new.html",
                 form={
@@ -396,7 +525,7 @@ def create_app():
                     "n_questions": 50,
                     "n_options": 5,
                     "n_blocks": 0,
-                    "params": settings,
+                    "params": params,
                 },
                 detection=None,
             )
@@ -490,6 +619,7 @@ def create_app():
                             for index in range(state["n_options"])
                         ],
                         n_blocks=int(detection["n_blocks"] or 1),
+                        mark_style=_active_mark_style() or "semua",
                         bubble_radius=float(
                             sum(item["radius"] for item in detection["bubbles"])
                             / max(1, len(detection["bubbles"]))
@@ -565,12 +695,13 @@ def create_app():
     @app.route("/templates/sample", methods=["GET", "POST"])
     def sample_sheet():
         settings = get_settings()
+        active = _active_mark_style() or "semua"
         form = {
             "n_questions": 50,
             "n_options": 5,
             "n_blocks": 2,
             "title": "LEMBAR JAWABAN PILIHAN GANDA",
-            "mark_style": settings.get("mark_style", "semua"),
+            "mark_style": active,
         }
         generated = None
         if request.method == "POST":
@@ -582,10 +713,9 @@ def create_app():
                 "n_blocks": _as_int(request.form.get("n_blocks"), 0, 0, 4),
                 "title": request.form.get("title", "").strip()
                 or "LEMBAR JAWABAN PILIHAN GANDA",
-                "mark_style": request.form.get("mark_style", "semua"),
+                # Instruksi mengikuti mode/tenant yang dipilih di awal.
+                "mark_style": active,
             }
-            if form["mark_style"] not in MARK_STYLES:
-                form["mark_style"] = "semua"
             style_info = mark_style_info(form["mark_style"])
             try:
                 image, _, _ = generate_blank_sheet(
@@ -620,7 +750,7 @@ def create_app():
 
     @app.route("/templates/<int:template_id>")
     def template_detail(template_id):
-        template = db.get_or_404(Template, template_id)
+        template = _get_visible_template_or_404(template_id)
         ref_path = abs_upload(template.ref_path)
         reference = cv2.imread(ref_path) if ref_path else None
         folder = os.path.join(DEBUG_UPLOAD_DIR, f"template_{template.id}")
@@ -672,7 +802,7 @@ def create_app():
 
     @app.route("/templates/<int:template_id>/delete", methods=["POST"])
     def template_delete(template_id):
-        template = db.get_or_404(Template, template_id)
+        template = _get_visible_template_or_404(template_id)
         if template.scans:
             flash(
                 "Templat tidak dapat dihapus karena sudah memiliki hasil pemeriksaan. "
@@ -688,12 +818,12 @@ def create_app():
 
     @app.route("/keys")
     def keys_list():
-        keys = AnswerKey.query.order_by(AnswerKey.created_at.desc()).all()
+        keys = _visible_keys_query().order_by(AnswerKey.created_at.desc()).all()
         return render_template("keys_list.html", keys=keys)
 
     @app.route("/templates/<int:template_id>/keys")
     def key_list_for_template(template_id):
-        template = db.get_or_404(Template, template_id)
+        template = _get_visible_template_or_404(template_id)
         keys = (
             AnswerKey.query.filter_by(template_id=template.id)
             .order_by(AnswerKey.created_at.desc())
@@ -740,7 +870,7 @@ def create_app():
 
     @app.route("/templates/<int:template_id>/keys/new", methods=["GET", "POST"])
     def key_new(template_id):
-        template = db.get_or_404(Template, template_id)
+        template = _get_visible_template_or_404(template_id)
         if request.method == "POST":
             answers = {}
             try:
@@ -778,7 +908,7 @@ def create_app():
 
     @app.route("/templates/<int:template_id>/keys/upload", methods=["POST"])
     def key_upload(template_id):
-        template = db.get_or_404(Template, template_id)
+        template = _get_visible_template_or_404(template_id)
         upload = request.files.get("excel")
         if upload is None or not upload.filename:
             flash("Pilih file Excel terlebih dahulu.", "danger")
@@ -820,7 +950,7 @@ def create_app():
 
     @app.route("/templates/<int:template_id>/keys/example.xlsx")
     def key_example(template_id):
-        template = db.get_or_404(Template, template_id)
+        template = _get_visible_template_or_404(template_id)
         output = build_key_example(
             template.n_questions, template.option_labels
         )
@@ -833,7 +963,7 @@ def create_app():
 
     @app.route("/keys/<int:key_id>", methods=["GET", "POST"])
     def key_edit(key_id):
-        key = db.get_or_404(AnswerKey, key_id)
+        key = _get_visible_key_or_404(key_id)
         template = key.template
         if request.method == "POST":
             answers = {}
@@ -892,7 +1022,7 @@ def create_app():
 
     @app.route("/keys/<int:key_id>/delete", methods=["POST"])
     def key_delete(key_id):
-        key = db.get_or_404(AnswerKey, key_id)
+        key = _get_visible_key_or_404(key_id)
         template_id = key.template_id
         if key.scans:
             flash(
@@ -911,13 +1041,13 @@ def create_app():
     @app.route("/scan", methods=["GET", "POST"])
     def scan_page():
         settings = get_settings()
-        templates = Template.query.order_by(Template.name).all()
+        templates = _visible_templates_query().order_by(Template.name).all()
         selected_template_id = request.values.get("template_id", type=int)
-        selected_template = (
-            db.session.get(Template, selected_template_id)
-            if selected_template_id
-            else None
-        )
+        selected_template = None
+        if selected_template_id:
+            candidate = db.session.get(Template, selected_template_id)
+            if _template_is_visible(candidate):
+                selected_template = candidate
         selected_key_id = request.values.get("key_id", type=int)
         templates_json = {
             template.id: {
@@ -960,11 +1090,7 @@ def create_app():
                         params["mark_gain"] = float(
                             stored.get("mark_gain", 1.0) or 1.0
                         )
-                        mark_style = request.form.get(
-                            "mark_style", settings.get("mark_style", "semua")
-                        )
-                        if mark_style not in MARK_STYLES:
-                            mark_style = "semua"
+                        mark_style = _active_mark_style() or "semua"
                         style_info = mark_style_info(mark_style)
                         params.update(
                             {
@@ -1179,7 +1305,7 @@ def create_app():
         batch = request.args.get("batch", "").strip()
         template_id = request.args.get("template_id", type=int)
         grade = request.args.get("grade", "").strip()
-        query = ScanResult.query
+        query = _results_mode_filter(ScanResult.query)
         if batch:
             query = query.filter(ScanResult.batch_id == batch)
         if template_id:
@@ -1223,7 +1349,7 @@ def create_app():
     @app.route("/results")
     def results_list():
         results, filters = _filtered_results()
-        templates = Template.query.order_by(Template.name).all()
+        templates = _visible_templates_query().order_by(Template.name).all()
         active_filters = {
             key: value for key, value in filters.items() if value
         }
@@ -1267,7 +1393,7 @@ def create_app():
 
     @app.route("/results/<int:result_id>")
     def result_detail(result_id):
-        result = db.get_or_404(ScanResult, result_id)
+        result = _get_visible_result_or_404(result_id)
         stored = result.debug_steps or {}
         completed = complete_debug_stages(stored)
         if completed != stored:
@@ -1283,7 +1409,7 @@ def create_app():
 
     @app.route("/results/<int:result_id>/export.xlsx")
     def result_export(result_id):
-        result = db.get_or_404(ScanResult, result_id)
+        result = _get_visible_result_or_404(result_id)
         output = export_results_excel([result])
         safe_name = "".join(
             char if char.isalnum() or char in "-_" else "_"
@@ -1298,7 +1424,7 @@ def create_app():
 
     @app.route("/results/<int:result_id>/delete", methods=["POST"])
     def result_delete(result_id):
-        result = db.get_or_404(ScanResult, result_id)
+        result = _get_visible_result_or_404(result_id)
         batch_id = result.batch_id
         name = result.student_name
         _delete_result_files(result)
@@ -1329,9 +1455,6 @@ def create_app():
                 ),
                 "adaptive_c": _as_int(request.form.get("adaptive_c"), 15, -20, 50),
                 "morph_kernel": _as_int(request.form.get("morph_kernel"), 3, 1, 15),
-                "mark_style": request.form.get("mark_style", "semua")
-                if request.form.get("mark_style") in MARK_STYLES
-                else "semua",
                 "fill_ratio": _as_float(
                     request.form.get("fill_ratio"), 0.40, 0.05, 0.95
                 ),
@@ -1346,11 +1469,7 @@ def create_app():
             return redirect(url_for("settings_page"))
         return render_template(
             "settings.html",
-            stats={
-                "templates": Template.query.count(),
-                "keys": AnswerKey.query.count(),
-                "scans": ScanResult.query.count(),
-            },
+            stats=_dashboard_stats()[0],
         )
 
     @app.route("/media/<path:filename>")

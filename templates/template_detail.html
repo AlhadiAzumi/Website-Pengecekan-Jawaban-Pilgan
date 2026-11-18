@@ -38,6 +38,7 @@
           <dt class="col-5 text-muted">Jumlah soal</dt><dd class="col-7">{{ template.n_questions }}</dd>
           <dt class="col-5 text-muted">Opsi</dt><dd class="col-7">{{ template.option_labels|join(', ') }}</dd>
           <dt class="col-5 text-muted">Blok / kolom</dt><dd class="col-7">{{ template.n_blocks }}</dd>
+          <dt class="col-5 text-muted">Mode</dt><dd class="col-7">{{ mark_styles[template.mark_style].label if template.mark_style in mark_styles else 'Boleh semuanya' }}</dd>
           <dt class="col-5 text-muted">Ukuran acuan</dt><dd class="col-7">{{ template.width }} x {{ template.height }} px</dd>
           <dt class="col-5 text-muted">Radius bulatan</dt><dd class="col-7">{{ "%.1f"|format(template.bubble_radius) }} px</dd>
           <dt class="col-5 text-muted">Marker sudut</dt><dd class="col-7">{{ template.marker_positions|length if template.marker_positions else 0 }}</dd>

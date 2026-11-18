@@ -37,6 +37,15 @@
             <li class="nav-item"><a class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('key') }}" href="{{ url_for('keys_list') }}"><i class="bi bi-key me-1"></i>Kunci</a></li>
             <li class="nav-item"><a class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('result') }}" href="{{ url_for('results_list') }}"><i class="bi bi-bar-chart me-1"></i>Hasil</a></li>
             <li class="nav-item"><a class="nav-link {{ 'active' if request.endpoint == 'settings_page' }}" href="{{ url_for('settings_page') }}"><i class="bi bi-sliders me-1"></i>Debug</a></li>
+            {% if active_style %}
+            <li class="nav-item mode-nav ms-lg-2 mt-2 mt-lg-0">
+              <a class="mode-pill {{ 'active' if request.endpoint == 'mode_select' }}" href="{{ url_for('mode_select', next=request.path) }}" title="Ganti mode pemeriksaan">
+                <i class="bi bi-layers-half" aria-hidden="true"></i>
+                <span class="mode-pill-label">{{ active_style.label }}</span>
+                <span class="mode-pill-action">Ganti</span>
+              </a>
+            </li>
+            {% endif %}
             <li class="nav-item ms-lg-2 mt-2 mt-lg-0">
               <a class="btn btn-scan-nav {{ 'active' if request.endpoint == 'scan_page' }}" href="{{ url_for('scan_page') }}"><i class="bi bi-camera me-1"></i>Scan Lembar</a>
             </li>

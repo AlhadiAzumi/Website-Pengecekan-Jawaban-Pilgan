@@ -23,6 +23,9 @@ class Template(db.Model):
     n_options = db.Column(db.Integer, nullable=False)
     option_labels = db.Column(db.JSON, nullable=False)
     n_blocks = db.Column(db.Integer, nullable=False, default=1)
+    mark_style = db.Column(
+        db.String(32), nullable=False, default="semua", index=True
+    )
     bubble_radius = db.Column(db.Float, nullable=False, default=12.0)
     detect_params = db.Column(db.JSON)
     marker_positions = db.Column(db.JSON)

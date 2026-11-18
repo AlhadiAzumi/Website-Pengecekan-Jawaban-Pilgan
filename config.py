@@ -31,7 +31,6 @@ CANONICAL_LONG_SIDE = 1600
 
 DEFAULT_SETTINGS = {
     "fill_ratio": 0.40,
-    "mark_style": "semua",
     "threshold_method": "otsu",
     "adaptive_block_size": 31,
     "adaptive_c": 15,

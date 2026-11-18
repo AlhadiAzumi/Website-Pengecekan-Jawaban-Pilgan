@@ -21,12 +21,16 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Instruksi cara menjawab</label>
-            <select class="form-select" name="mark_style">
-              {% for key, info in mark_styles.items() %}
-              <option value="{{ key }}" {{ 'selected' if form.mark_style == key }}>{{ info.label }}</option>
-              {% endfor %}
-            </select>
-            <div class="form-text">Teks instruksi akan dicetak pada lembar.</div>
+            {% if active_style %}
+            <div class="mode-notice{{ ' mode-notice-warn' if active_mark_style == 'silang' }}">
+              <i class="bi {{ 'bi-exclamation-triangle-fill' if active_mark_style == 'silang' else 'bi-info-circle-fill' }}" aria-hidden="true"></i>
+              <span>Mode aktif: <strong>{{ active_style.label }}</strong>. {{ active_style.instruction }}</span>
+            </div>
+            <div class="form-text">
+              Instruksi mengikuti mode pemeriksaan.
+              <a href="{{ url_for('mode_select', next=request.path) }}">Ganti mode</a>.
+            </div>
+            {% endif %}
           </div>
           <div class="row g-3">
             <div class="col-6">

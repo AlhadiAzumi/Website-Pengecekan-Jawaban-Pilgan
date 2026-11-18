@@ -185,4 +185,25 @@ Di halaman **Buat Templat** dan **Scan & Periksa** ada tombol **Ambil Foto**, ja
 
 Untuk hasil terbaik, foto seluruh lembar dengan keempat sudut terlihat, cahaya cukup, dan kamera tidak goyang.
 
+### Mode pemeriksaan (lingkungan data)
+
+Setelah login, aplikasi meminta **mode pemeriksaan** sebelum halaman lain bisa dibuka. Mode ini berfungsi seperti *tenant*: setiap mode punya templat, paket kunci, dan hasil pemeriksaan sendiri, jadi data antar-mode tidak tercampur.
+
+| Mode | Instruksi jawaban | Isi lingkungan |
+|---|---|---|
+| **Hanya silang (X)** | Jawaban disilang | Templat/kunci/hasil mode silang |
+| **Hanya bulat / lingkari** | Jawaban dilingkari | Templat/kunci/hasil mode bulat |
+| **Hanya bulat hitam** | Bulatan dihitamkan penuh | Templat/kunci/hasil mode bulat hitam |
+| **Boleh semuanya** | Silang, lingkari, atau hitamkan | Data campuran dan templat lama |
+
+- Pilihan mode muncul otomatis setelah login dan harus dipilih ulang setiap sesi baru.
+- Templat baru otomatis diberi label sesuai mode yang aktif. Lembar contoh dan petunjuk scan juga mengikuti mode tersebut, termasuk ambang *fill ratio* awal.
+- Mode ketat (mis. Hanya silang) tetap menampilkan templat bertanda **Boleh semuanya** agar templat lama bisa dipakai ulang. Hasil scan tetap dipisahkan berdasarkan mode saat scan dilakukan.
+- Ganti mode kapan saja lewat tombol pil mode di navbar, lalu pilih **Ganti**.
+- Templat/kunci/hasil dari mode lain tidak bisa dibuka lewat URL langsung; aplikasi menampilkan 404.
+
+### Lembar dengan blok soal tidak rata
+
+Jumlah soal per blok boleh berbeda, misalnya 50 soal terbagi 20 / 20 / 10. Isi **jumlah soal** dan **jumlah blok** sesuai lembar; sistem menomori soal berurutan dari kiri ke kanan pada tiap blok. Jika susunan bulatan tidak cocok, templat tidak disimpan dan aplikasi menampilkan saran perbaikan (misalnya mengubah jumlah soal, jumlah blok, atau keduanya) agar tidak terbentuk grid yang salah.
+
 
