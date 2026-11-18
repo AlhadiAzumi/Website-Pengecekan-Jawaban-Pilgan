@@ -1697,6 +1697,17 @@ h1, h2, h3, h4, h5, h6 {
   background: #fbf8ff;
 }
 
+/* Umpan balik langsung saat kartu lain dipilih (tanpa menunggu submit). */
+.mode-card:has(input:checked) {
+  border-color: var(--brand);
+  background: #fbf8ff;
+}
+
+.mode-card:focus-within {
+  outline: 3px solid rgba(124, 58, 237, 0.3);
+  outline-offset: 2px;
+}
+
 .mode-card-icon {
   display: inline-flex;
   align-items: center;
@@ -1748,6 +1759,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .mode-card-active .mode-card-check {
+  opacity: 1;
+}
+
+.mode-card:has(input:checked) .mode-card-check {
   opacity: 1;
 }
 

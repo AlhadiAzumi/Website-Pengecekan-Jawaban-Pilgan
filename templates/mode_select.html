@@ -56,3 +56,26 @@
   </div>
 </form>
 {% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".mode-card"));
+  if (!cards.length) return;
+
+  function syncActiveCard() {
+    cards.forEach(function (card) {
+      var input = card.querySelector('input[type="radio"]');
+      card.classList.toggle("mode-card-active", !!(input && input.checked));
+    });
+  }
+
+  cards.forEach(function (card) {
+    var input = card.querySelector('input[type="radio"]');
+    if (input) input.addEventListener("change", syncActiveCard);
+  });
+
+  syncActiveCard();
+})();
+</script>
+{% endblock %}
