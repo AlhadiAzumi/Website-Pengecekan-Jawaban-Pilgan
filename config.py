@@ -47,6 +47,7 @@ DEFAULT_SETTINGS = {
 MARK_STYLES = {
     "semua": {
         "label": "Boleh semuanya",
+        "short": "Semua",
         "fill_ratio": 0.40,
         "instruction": (
             "Boleh menyilang (X), melingkari, atau menghitamkan penuh satu "
@@ -55,16 +56,19 @@ MARK_STYLES = {
     },
     "silang": {
         "label": "Hanya silang (X)",
+        "short": "Silang (X)",
         "fill_ratio": 0.20,
         "instruction": "Beri tanda silang (X) pada satu jawaban yang dipilih.",
     },
     "bulat": {
         "label": "Hanya bulat / lingkari",
+        "short": "Bulat",
         "fill_ratio": 0.20,
         "instruction": "Lingkari satu jawaban yang dipilih.",
     },
     "bulat_hitam": {
         "label": "Hanya bulat hitam",
+        "short": "Bulat hitam",
         "fill_ratio": 0.40,
         "instruction": "Hitamkan penuh satu bulatan jawaban yang dipilih.",
     },
