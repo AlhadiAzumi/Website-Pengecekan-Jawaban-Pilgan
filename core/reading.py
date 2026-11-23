@@ -629,6 +629,23 @@ def annotate_sheet(aligned, measurements, details, correct, wrong, empty, double
     for item in measurements:
         by_question.setdefault(item["question_no"], {})[item["option_index"]] = item
 
+    # Nomor soal dicetak di sebelah kiri opsi pertama pada tiap blok. Posisi ini
+    # dipakai untuk meletakkan keterangan "TANDA SALAH" di samping nomor, bukan
+    # di atas pilihan supaya tidak menutupi coretan.
+    first_x_by_question = {
+        question_no: min(item["x"] for item in question_items.values())
+        for question_no, question_items in by_question.items()
+        if question_items
+    }
+    block_starts = sorted(set(first_x_by_question.values()))
+    block_start_index = {
+        question_no: min(
+            range(len(block_starts)),
+            key=lambda index: abs(block_starts[index] - first_x),
+        )
+        for question_no, first_x in first_x_by_question.items()
+    }
+
     for detail in details:
         items = by_question.get(detail["question_no"], {})
         status = detail["status"]
@@ -656,42 +673,76 @@ def annotate_sheet(aligned, measurements, details, correct, wrong, empty, double
                     )
             if detail.get("shape_note") and items:
                 anchor = min(items.values(), key=lambda item: item["y"])
-                text = "TANDA SALAH"
+                first_item = min(items.values(), key=lambda item: item["x"])
+                number_x = first_item["x"] - first_item["radius"] - max(
+                    22, first_item["radius"] * 2.2
+                )
+                start_index = block_start_index.get(detail["question_no"], 0)
+                if start_index and len(block_starts) > 1:
+                    option_span = (
+                        max(item["x"] for item in items.values()) - first_item["x"]
+                    )
+                    left_edge = (
+                        block_starts[start_index - 1]
+                        + option_span
+                        + first_item["radius"]
+                        + 8 * scale
+                    )
+                else:
+                    left_edge = 16 * scale
+                available_width = max(24 * scale, number_x - left_edge - 6 * scale)
+
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 font_scale = max(0.35, 0.48 * scale)
                 thickness = max(1, int(round(1.5 * scale)))
-                text_x = int(anchor["x"] - anchor["radius"] * 1.2)
-                text_y = max(int(14 * scale), int(anchor["y"] - anchor["radius"] * 1.8))
-                cv2.putText(
-                    output,
-                    text,
-                    (text_x, text_y),
-                    font,
-                    font_scale,
-                    (0, 70, 220),
-                    thickness + 2,
-                    cv2.LINE_AA,
+                lines = ("TANDA", "SALAH")
+                line_width = max(
+                    cv2.getTextSize(line, font, font_scale, thickness)[0][0]
+                    for line in lines
                 )
-                cv2.putText(
-                    output,
-                    text,
-                    (text_x, text_y),
-                    font,
-                    font_scale,
-                    (255, 255, 255),
-                    thickness,
-                    cv2.LINE_AA,
+                if line_width > available_width:
+                    font_scale = max(
+                        0.26 * scale, font_scale * available_width / line_width
+                    )
+                (line_w, line_h), _ = cv2.getTextSize(
+                    lines[0], font, font_scale, thickness
                 )
-            # Tandai posisi kunci dengan garis biru tipis agar mudah dibandingkan.
+                text_x = int(number_x - line_w - 6 * scale)
+                first_y = int(anchor["y"] - line_h * 0.5)
+                for index, line in enumerate(lines):
+                    text_y = first_y + index * int(line_h * 1.15)
+                    cv2.putText(
+                        output,
+                        line,
+                        (text_x, text_y),
+                        font,
+                        font_scale,
+                        (0, 70, 220),
+                        thickness + 2,
+                        cv2.LINE_AA,
+                    )
+                    cv2.putText(
+                        output,
+                        line,
+                        (text_x, text_y),
+                        font,
+                        font_scale,
+                        (255, 255, 255),
+                        thickness,
+                        cv2.LINE_AA,
+                    )
+            # Kunci jawaban cukup diberi kotak biru tanpa panah penunjuk.
             for item in items.values():
                 if item["option_label"] == detail["correct_answer"]:
-                    cv2.drawMarker(
+                    center = (int(item["x"]), int(item["y"]))
+                    box = int(item["radius"] * 1.25)
+                    cv2.rectangle(
                         output,
-                        (int(item["x"]), int(item["y"] - item["radius"] * 1.6)),
+                        (center[0] - box, center[1] - box),
+                        (center[0] + box, center[1] + box),
                         (220, 110, 0),
-                        cv2.MARKER_TRIANGLE_DOWN,
-                        max(8, int(round(12 * scale))),
-                        max(1, int(round(2 * scale))),
+                        max(2, int(round(3 * scale))),
+                        cv2.LINE_AA,
                     )
         elif status == "kosong":
             for item in items.values():
