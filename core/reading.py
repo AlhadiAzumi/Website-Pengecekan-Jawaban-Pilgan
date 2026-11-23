@@ -347,20 +347,25 @@ def _mark_shape_at(binary, reference_binary, x, y, radius, ink_ratio=None):
     # ``extra`` tampak seperti cincin. Untuk membedakannya dari lingkaran,
     # kepenuhan tengah diukur langsung pada citra scan.
     raw_core = float(np.count_nonzero(roi[core])) / core_area
-    band = (
-        (distance >= 0.50 * radius)
-        & (distance <= 1.30 * radius)
-        & (extra > 0)
-    )
+    annulus = (distance >= 0.50 * radius) & (distance <= 1.30 * radius)
+    band = annulus & (extra > 0)
     diagonal_ratio = float(
         np.count_nonzero(band & np.isin(sectors, (1, 3, 5, 7)))
     ) / float(max(1, int(np.count_nonzero(band))))
+    # Pengurangan templat bisa mengubah tanda hitam penuh menjadi pola cincin
+    # atau X. Karena itu bentuk X diukur dari tinta asli hasil scan, bukan dari
+    # sisa pengurangan. Tanda X selalu menumpahkan tinta di sektor diagonal dan
+    # hampir kosong di empat sektor samping; bulatan hitam mengisi semua sektor.
+    raw_band = annulus & (roi > 0)
+    diagonal_ink = int(np.count_nonzero(raw_band & np.isin(sectors, (1, 3, 5, 7))))
+    cardinal_ink = int(np.count_nonzero(raw_band & np.isin(sectors, (0, 2, 4, 6))))
+    x_like = diagonal_ink > 0 and cardinal_ink / float(diagonal_ink) < 0.50
     # Citra hasil scan membuat tengah bulatan hitam tampak lebih terang daripada
     # simulasi, jadi ambang kepenuhan tengah sengaja direndahkan. Rasio tinta
     # total dipakai untuk memisahkan lingkaran tipis dari bulatan yang benar
     # benar dihitamkan pada hasil pemindaian.
     heavy_ink = ink_ratio is None or ink_ratio >= 0.60
-    filled_center = raw_core >= 0.30 and diagonal_ratio < 0.75 and heavy_ink
+    filled_center = raw_core >= 0.30 and not x_like and heavy_ink
 
     local_x, local_y = cx - x0, cy - y0
     dist_to_extra = cv2.distanceTransform(
@@ -395,10 +400,13 @@ def _mark_shape_at(binary, reference_binary, x, y, radius, ink_ratio=None):
     best = min(scores, key=scores.get)
     if best == "setengah":
         return "lain"
+    # Ciri X paling kuat ada pada tinta asli: empat sektor diagonal penuh,
+    # empat sektor samping nyaris kosong. Ini mengalahkan kemiripan chamfer,
+    # karena penghapusan templat sering membuat X tampak seperti bulatan penuh.
+    if x_like:
+        return "silang"
     if best == "silang" and diagonal_ratio < 0.55:
         # Lingkaran yang sedikit miring kadang lebih mirip X pada jarak chamfer.
-        # Batang X selalu punya tinta pada sektor diagonal; jika tidak ada,
-        # pilih pola lingkaran/hitam terbaik berikutnya.
         fallback = [
             shape for shape in ("lingkar", "hitam") if scores[shape] < float("inf")
         ]
@@ -412,23 +420,11 @@ def _mark_shape_at(binary, reference_binary, x, y, radius, ink_ratio=None):
         and scores["setengah"] <= scores["hitam"] + 0.25
     ):
         return "lain"
-    force_filled = False
-    if (
-        best == "silang"
-        and ink_ratio is not None
-        and ink_ratio >= 0.80
-        and raw_core >= 0.60
-    ):
-        # Tanda hitam penuh pada hasil scan sering menyisakan dua pita tinta
-        # diagonal setelah tinta cetak dibuang, sehingga mirip X. Tanda X
-        # sintetis tidak pernah mencapai rasio tinta ini.
-        best = "hitam"
-        force_filled = True
     if best == "lingkar" and filled_center:
         # Chamfer melihat sisa tinta setelah templat dibuang, sehingga bulatan
         # hitam yang tengahnya tertutup huruf cetak tampak seperti cincin.
         best = "hitam"
-    if best == "hitam" and not filled_center and not force_filled:
+    if best == "hitam" and not filled_center:
         # Bagian tengah bulatan hitam penuh tinta. Lingkaran hanya mengisi
         # cincin luar, sedangkan tanda setengah isi hanya menutup separuh.
         if core_ratio < 0.30:
@@ -630,7 +626,7 @@ def score_decisions(decisions, key_map, n_questions, mark_style="semua"):
             if (
                 str(mark_style) == "bulat_hitam"
                 and key_ratios
-                and max(key_ratios) >= best_ratio - 0.05
+                and max(key_ratios) >= best_ratio - 0.20
             ):
                 status = "benar"
                 correct += 1
