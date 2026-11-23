@@ -354,12 +354,52 @@ def _mark_shape_at(binary, reference_binary, x, y, radius, ink_ratio=None):
     ) / float(max(1, int(np.count_nonzero(band))))
     # Pengurangan templat bisa mengubah tanda hitam penuh menjadi pola cincin
     # atau X. Karena itu bentuk X diukur dari tinta asli hasil scan, bukan dari
-    # sisa pengurangan. Tanda X selalu menumpahkan tinta di sektor diagonal dan
-    # hampir kosong di empat sektor samping; bulatan hitam mengisi semua sektor.
-    raw_band = annulus & (roi > 0)
-    diagonal_ink = int(np.count_nonzero(raw_band & np.isin(sectors, (1, 3, 5, 7))))
-    cardinal_ink = int(np.count_nonzero(raw_band & np.isin(sectors, (0, 2, 4, 6))))
-    x_like = diagonal_ink > 0 and cardinal_ink / float(diagonal_ink) < 0.50
+    # sisa pengurangan. Tanda X menumpahkan tinta di sektor diagonal dan hampir
+    # kosong di sektor samping. Pengukuran dilakukan juga pada cincin luar agar
+    # huruf opsi cetak di tengah tidak ikut menutup celah sektor tersebut.
+    diagonal_sectors = np.isin(sectors, (1, 3, 5, 7))
+    cardinal_sectors = np.isin(sectors, (0, 2, 4, 6))
+
+    def ink_counts_in(mask):
+        pixels = mask & (roi > 0)
+        diagonal = int(np.count_nonzero(pixels & diagonal_sectors))
+        cardinal = int(np.count_nonzero(pixels & cardinal_sectors))
+        return diagonal, cardinal
+
+    diagonal_ink, cardinal_ink = ink_counts_in(annulus)
+    outer_diag, outer_card = ink_counts_in(
+        (distance >= 0.80 * radius) & (distance <= 1.30 * radius)
+    )
+    outer2_diag, outer2_card = ink_counts_in(
+        (distance >= 0.90 * radius) & (distance <= 1.30 * radius)
+    )
+
+    # Celah tiga sektor berturut-turut yang nyaris kosong juga ciri khas X.
+    # Bulatan hitam tetap mengisi sektor tersebut meski tinta scan sedikit
+    # timpang, jadi pemeriksaan ini mencegah bulatan hitam salah ditolak.
+    sector_counts = np.array(
+        [
+            int(np.count_nonzero(annulus & (roi > 0) & (sectors == sector)))
+            for sector in range(8)
+        ],
+        dtype=np.float64,
+    )
+    total_sector_ink = max(float(sector_counts.sum()), 1.0)
+    min_wedge = min(
+        float(sector_counts[i] + sector_counts[(i + 1) % 8] + sector_counts[(i + 2) % 8])
+        / total_sector_ink
+        for i in range(8)
+    )
+    x_like = diagonal_ink > 0 and (
+        cardinal_ink / float(diagonal_ink) < 0.50
+        or (
+            outer_diag > 0
+            and outer2_diag > 0
+            and outer_card / float(outer_diag) < 0.55
+            and outer2_card / float(outer2_diag) < 0.55
+            and min_wedge < 0.15
+        )
+    )
     # Citra hasil scan membuat tengah bulatan hitam tampak lebih terang daripada
     # simulasi, jadi ambang kepenuhan tengah sengaja direndahkan. Rasio tinta
     # total dipakai untuk memisahkan lingkaran tipis dari bulatan yang benar
