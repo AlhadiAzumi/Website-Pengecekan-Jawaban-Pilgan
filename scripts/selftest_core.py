@@ -212,7 +212,52 @@ def main():
         "Tanda lingkaran belum terbaca; turunkan fill_ratio pada pengaturan."
     )
 
-    print("[5] Menguji threshold adaptif dan deteksi templat dengan noise...")
+    print("[5] Menguji instruksi hanya silang (X)...")
+    shape_key_map = {number: "B" for number in range(1, n_questions + 1)}
+    shape_params = dict(params, fill_ratio=0.20, mark_style="silang")
+    for style, expected_correct in (
+        ("silang", n_questions),
+        ("lingkar", 0),
+        ("arsir", 0),
+    ):
+        shape_sheet = reference.copy()
+        for question_no in range(1, n_questions + 1):
+            bubble = next(
+                item
+                for item in bubbles
+                if item["question_no"] == question_no
+                and item["option_label"] == "B"
+            )
+            draw_mark(
+                shape_sheet,
+                bubble["x"],
+                bubble["y"],
+                bubble["radius"],
+                style,
+            )
+        shape_result = process_aligned_sheet(
+            shape_sheet,
+            bubbles,
+            shape_key_map,
+            n_questions,
+            shape_params,
+            reference=reference,
+        )
+        print(
+            f"    {style} pada mode silang: benar={shape_result['correct']} "
+            f"(harus {expected_correct}), "
+            f"ditolak={shape_result['invalid_shape_count']}"
+        )
+        assert shape_result["correct"] == expected_correct
+        if expected_correct == n_questions:
+            assert shape_result["invalid_shape_count"] == 0
+        else:
+            assert shape_result["invalid_shape_count"] == n_questions
+            assert all(
+                detail.get("shape_note") for detail in shape_result["details"]
+            )
+
+    print("[6] Menguji threshold adaptif dan deteksi templat dengan noise...")
     noisy = reference.copy()
     shadow = np.tile(
         np.linspace(0.55, 1.0, reference.shape[1])[None, :, None],

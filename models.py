@@ -188,6 +188,7 @@ class ScanAnswer(db.Model):
     raw_ratio = db.Column(db.Float, default=0.0)
     ratio = db.Column(db.Float, default=0.0)
     all_ratios = db.Column(db.JSON)
+    shape_note = db.Column(db.String(255))
 
 
 class AppSetting(db.Model):

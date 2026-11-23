@@ -132,6 +132,11 @@
                 title="Rasio {{ '%.2f'|format(opt.ratio) }}{{ ' - dicoret (=), tidak dihitung' if opt.canceled else '' }}">{{ opt.label }}</span>
           {% endfor %}
         </div>
+        {% if answer.shape_note %}
+        <div class="small fw-semibold text-danger mt-1">
+          <i class="bi bi-exclamation-triangle me-1"></i>{{ answer.shape_note }}
+        </div>
+        {% endif %}
         {% if answer.status == 'ganda' %}
         <div class="small fw-semibold text-orange mt-1">
           <i class="bi bi-exclamation-circle me-1"></i>Jawaban ganda &mdash; dianggap belum dijawab.

@@ -1,4 +1,6 @@
 """Pembacaan jawaban: thresholding, morfologi, analisis area piksel, penilaian."""
+import math
+
 import cv2
 import numpy as np
 
@@ -266,13 +268,119 @@ def measure_bubbles(binary, bubbles, inner_scale=1.0):
     return measurements
 
 
-def decide_answers(measurements, fill_ratio=0.40):
+# Gaya tanda yang diterima pada tiap mode instruksi. Mode "semua" sengaja
+# tidak masuk daftar: semua bentuk tanda tetap diterima seperti sebelumnya.
+SHAPE_ACCEPT = {
+    # Hanya mode silang yang divalidasi bentuknya. Mode lain memakai ambang
+    # rasio tinta seperti sebelum fitur tenant diperkenalkan.
+    "silang": {"silang"},
+}
+SHAPE_LABEL = {
+    "silang": "silang (X)",
+    "lingkar": "lingkaran",
+    "hitam": "hitam penuh",
+    "lain": "tidak dikenal",
+}
+
+
+def _accepted_shape_label(mark_style):
+    accepted = SHAPE_ACCEPT.get(str(mark_style or "")) or set()
+    first = next(iter(accepted), "")
+    return SHAPE_LABEL.get(first, str(mark_style or ""))
+
+
+def _mark_shape_at(binary, reference_binary, x, y, radius):
+    """Kenali bentuk coretan dengan membandingkan scan dan templat kosong.
+
+    Tinta cetak (cincin bulatan atau huruf opsi) dibuang lebih dulu. Sisa tinta
+    dianalisis di bagian tengah sel dan pada cincin di sekitarnya. Silang (X)
+    memusat pada empat sektor diagonal, sedangkan lingkaran merata ke seluruh
+    arah dan bulatan hitam juga memenuhi bagian tengah sel.
+    """
+    radius = max(4.0, float(radius))
+    cx, cy = float(x), float(y)
+    half = int(np.ceil(1.6 * radius)) + 2
+    height, width = binary.shape[:2]
+    x0, x1 = max(0, int(cx) - half), min(width, int(cx) + half + 1)
+    y0, y1 = max(0, int(cy) - half), min(height, int(cy) + half + 1)
+    if x1 <= x0 or y1 <= y0:
+        return "lain"
+
+    roi = binary[y0:y1, x0:x1]
+    reference = reference_binary[y0:y1, x0:x1]
+    # Dilation 3x3 cukup untuk menyisihkan goresan cetak tanpa ikut
+    # menghapus coretan pensil yang tipis.
+    reference = cv2.dilate(
+        reference,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+        iterations=1,
+    )
+    extra = cv2.bitwise_and(roi, cv2.bitwise_not(reference))
+
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    distance = np.hypot(xx - cx, yy - cy)
+    core = distance <= 0.40 * radius
+    ring = (distance >= 0.55 * radius) & (distance <= 1.30 * radius)
+    whole = distance <= 1.35 * radius
+    core_area = max(1, int(core.sum()))
+    core_ratio = np.count_nonzero(extra[core]) / float(core_area)
+    ring_ink = int(np.count_nonzero(extra[ring]))
+    total_ink = int(np.count_nonzero(extra[whole]))
+    if total_ink < max(8, int(0.01 * np.count_nonzero(whole))):
+        return "lain"
+
+    angles = (np.arctan2(yy - cy, xx - cx) + 2.0 * math.pi) % (2.0 * math.pi)
+    sectors = np.floor((angles + math.pi / 8.0) / (math.pi / 4.0)).astype(int) % 8
+    sector_ink = [int(np.count_nonzero(extra[ring & (sectors == index)])) for index in range(8)]
+    threshold = max(2, int(0.25 * max(sector_ink)))
+    occupied = sum(1 for value in sector_ink if value >= threshold)
+    diagonal_ink = sum(sector_ink[index] for index in (1, 3, 5, 7))
+    diagonal_ratio = diagonal_ink / float(max(1, ring_ink))
+
+    if core_ratio >= 0.50 and occupied >= 6:
+        return "hitam"
+    if occupied >= 6 and diagonal_ratio < 0.72:
+        return "lingkar"
+    if occupied <= 6 and diagonal_ratio >= 0.72:
+        return "silang"
+    return "lain"
+
+
+def classify_mark_shapes(binary, reference_binary, measurements, mark_style="semua"):
+    """Isi ``mark_shape`` dan ``shape_ok`` pada tiap hasil pengukuran."""
+    accepted = SHAPE_ACCEPT.get(str(mark_style or "semua"))
+    if not accepted or reference_binary is None:
+        for item in measurements:
+            item["mark_shape"] = None
+            item["shape_ok"] = True
+        return measurements
+
+    if reference_binary.shape[:2] != binary.shape[:2]:
+        reference_binary = cv2.resize(
+            reference_binary, (binary.shape[1], binary.shape[0])
+        )
+    for item in measurements:
+        shape = _mark_shape_at(
+            binary,
+            reference_binary,
+            item["x"],
+            item["y"],
+            item["radius"],
+        )
+        item["mark_shape"] = shape
+        item["shape_ok"] = shape in accepted
+    return measurements
+
+
+def decide_answers(measurements, fill_ratio=0.40, mark_style="semua"):
     """Tentukan jawaban tiap soal berdasarkan opsi terisi dan coretan ``=``.
 
-    Opsi yang dicoret tidak dihitung. Jika dua opsi terisi tetapi salah satunya
-    dicoret, jawaban diambil dari opsi yang tersisa. Jawaban ganda sejati tetap
+    Opsi yang dicoret tidak dihitung. Pada mode instruksi khusus, tanda yang
+    bentuknya tidak sesuai (misal lingkaran saat mode hanya silang) juga tidak
+    dihitung dan soalnya diberi status salah. Jawaban ganda sejati tetap
     diberi status ``ganda`` dan dianggap belum dijawab saat penilaian.
     """
+    strict = str(mark_style or "semua") in SHAPE_ACCEPT
     grouped = {}
     for item in measurements:
         grouped.setdefault(item["question_no"], []).append(item)
@@ -280,10 +388,48 @@ def decide_answers(measurements, fill_ratio=0.40):
     decisions = {}
     for question_no, items in grouped.items():
         ordered = sorted(items, key=lambda item: item["option_index"])
-        filled = [item for item in ordered if item["ratio"] >= fill_ratio]
+        all_filled = [item for item in ordered if item["ratio"] >= fill_ratio]
+        wrong_shape = (
+            [item for item in all_filled if not item.get("shape_ok", True)]
+            if strict
+            else []
+        )
+        filled = (
+            [item for item in all_filled if item.get("shape_ok", True)]
+            if strict
+            else all_filled
+        )
         canceled = [item for item in filled if item.get("canceled")]
         remaining = [item for item in filled if not item.get("canceled")]
         canceled_labels = [item["option_label"] for item in canceled]
+        shape_note = ""
+
+        if not filled and wrong_shape:
+            labels = [item["option_label"] for item in wrong_shape]
+            shapes = sorted(
+                {
+                    SHAPE_LABEL.get(item.get("mark_shape"), "tanda tidak dikenal")
+                    for item in wrong_shape
+                }
+            )
+            shape_note = (
+                "Tanda " + ", ".join(shapes) + " tidak sesuai instruksi "
+                f"{_accepted_shape_label(mark_style)}; tidak dinilai benar."
+            )
+            decisions[question_no] = {
+                "status": "salah",
+                "student_answer": "".join(labels),
+                "filled": wrong_shape,
+                "canceled": [],
+                "canceled_labels": [],
+                "ratios": ordered,
+                "top_ratio": max((item["ratio"] for item in wrong_shape), default=0.0),
+                "shape_note": shape_note,
+            }
+            continue
+        elif wrong_shape and remaining:
+            ignored = ", ".join(item["option_label"] for item in wrong_shape)
+            shape_note = f"Tanda pada opsi {ignored} tidak sesuai instruksi dan diabaikan."
 
         if not filled:
             decisions[question_no] = {
@@ -294,6 +440,7 @@ def decide_answers(measurements, fill_ratio=0.40):
                 "canceled_labels": [],
                 "ratios": ordered,
                 "top_ratio": max((item["ratio"] for item in ordered), default=0.0),
+                "shape_note": shape_note,
             }
         elif len(remaining) == 1:
             item = remaining[0]
@@ -305,6 +452,7 @@ def decide_answers(measurements, fill_ratio=0.40):
                 "canceled_labels": canceled_labels,
                 "ratios": ordered,
                 "top_ratio": item["ratio"],
+                "shape_note": shape_note,
             }
         elif not remaining:
             # Semua opsi yang terisi dicoret: soal dianggap tidak dijawab.
@@ -318,6 +466,7 @@ def decide_answers(measurements, fill_ratio=0.40):
                 "top_ratio": max(
                     (item["ratio"] for item in filled), default=0.0
                 ),
+                "shape_note": shape_note,
             }
         else:
             decisions[question_no] = {
@@ -330,6 +479,7 @@ def decide_answers(measurements, fill_ratio=0.40):
                 "canceled_labels": canceled_labels,
                 "ratios": ordered,
                 "top_ratio": max(item["ratio"] for item in remaining),
+                "shape_note": shape_note,
             }
     return decisions
 
@@ -359,6 +509,9 @@ def score_decisions(decisions, key_map, n_questions):
         elif decision["status"] == "ganda":
             status = "ganda"
             double += 1
+        elif decision["status"] == "salah":
+            status = "salah"
+            wrong += 1
         elif student_answer == key_answer:
             status = "benar"
             correct += 1
@@ -373,12 +526,15 @@ def score_decisions(decisions, key_map, n_questions):
                 "status": status,
                 "ratio": float(decision.get("top_ratio", 0.0)),
                 "canceled_labels": canceled_labels,
+                "shape_note": decision.get("shape_note", ""),
                 "all_ratios": [
                     {
                         "label": item["option_label"],
                         "ratio": round(float(item["ratio"]), 4),
                         "raw": round(float(item["raw_ratio"]), 4),
                         "canceled": bool(item.get("canceled")),
+                        "shape": item.get("mark_shape"),
+                        "shape_ok": bool(item.get("shape_ok", True)),
                     }
                     for item in decision.get("ratios", [])
                 ],
@@ -434,6 +590,34 @@ def annotate_sheet(aligned, measurements, details, correct, wrong, empty, double
                         max(2, int(round(3 * scale))),
                         cv2.LINE_AA,
                     )
+            if detail.get("shape_note") and items:
+                anchor = min(items.values(), key=lambda item: item["y"])
+                text = "TANDA SALAH"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = max(0.35, 0.48 * scale)
+                thickness = max(1, int(round(1.5 * scale)))
+                text_x = int(anchor["x"] - anchor["radius"] * 1.2)
+                text_y = max(int(14 * scale), int(anchor["y"] - anchor["radius"] * 1.8))
+                cv2.putText(
+                    output,
+                    text,
+                    (text_x, text_y),
+                    font,
+                    font_scale,
+                    (0, 70, 220),
+                    thickness + 2,
+                    cv2.LINE_AA,
+                )
+                cv2.putText(
+                    output,
+                    text,
+                    (text_x, text_y),
+                    font,
+                    font_scale,
+                    (255, 255, 255),
+                    thickness,
+                    cv2.LINE_AA,
+                )
             # Tandai posisi kunci dengan garis biru tipis agar mudah dibandingkan.
             for item in items.values():
                 if item["option_label"] == detail["correct_answer"]:
@@ -593,8 +777,16 @@ def process_aligned_sheet(
             measurements,
             require_two_bands=params.get("cell_mode", "bubble") == "letter",
         )
+    mark_style = str(params.get("mark_style", "semua") or "semua")
+    if mark_style in SHAPE_ACCEPT:
+        classify_mark_shapes(
+            binary, reference_binary, measurements, mark_style
+        )
     decisions = decide_answers(
-        measurements, float(params.get("fill_ratio", 0.40))
+        measurements, float(params.get("fill_ratio", 0.40)), mark_style
+    )
+    invalid_shape_count = sum(
+        1 for decision in decisions.values() if decision.get("shape_note")
     )
     scored = score_decisions(decisions, key_map, n_questions)
     annotated = annotate_sheet(
@@ -618,6 +810,7 @@ def process_aligned_sheet(
         "measurements": measurements,
         "decisions": decisions,
         "annotated": annotated,
+        "invalid_shape_count": invalid_shape_count,
         "threshold_label": method_label,
         "quality_warning": warning,
         **scored,

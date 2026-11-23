@@ -190,6 +190,19 @@ def ensure_scan_result_schema():
             )
 
 
+def ensure_scan_answer_schema():
+    """Tambahkan catatan bentuk tanda pada detail jawaban database lama."""
+    inspector = inspect(db.engine)
+    if "scan_answers" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("scan_answers")}
+    if "shape_note" not in columns:
+        with db.engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE scan_answers ADD COLUMN shape_note VARCHAR(255)")
+            )
+
+
 def ensure_template_schema():
     """Tandai templat lama sebagai mode campuran agar tetap bisa diakses."""
     inspector = inspect(db.engine)
@@ -224,6 +237,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         ensure_scan_result_schema()
+        ensure_scan_answer_schema()
         ensure_template_schema()
         seed_settings()
 
@@ -1126,6 +1140,7 @@ def create_app():
                             batch_id = new_id()
                             key_map = key.answer_map
                             success = 0
+                            invalid_shapes = 0
                             failures = []
                             for index, upload in enumerate(files):
                                 default_name = os.path.splitext(
@@ -1237,10 +1252,15 @@ def create_app():
                                                 status=detail["status"],
                                                 ratio=detail["ratio"],
                                                 all_ratios=detail["all_ratios"],
+                                                shape_note=detail.get("shape_note")
+                                                or None,
                                             )
                                         )
                                     db.session.commit()
                                     success += 1
+                                    invalid_shapes += int(
+                                        pipeline.get("invalid_shape_count", 0)
+                                    )
                                 except Exception as exc:  # noqa: BLE001
                                     db.session.rollback()
                                     failures.append(f"{student_name}: {exc}")
@@ -1266,6 +1286,14 @@ def create_app():
                                     f"{style_info['instruction']}",
                                     "warning" if mark_style == "silang" else "info",
                                 )
+                                if invalid_shapes:
+                                    flash(
+                                        f"{invalid_shapes} jawaban bertanda tidak "
+                                        f"sesuai mode {style_info['short']} dan tidak "
+                                        "dinilai benar. Periksa kembali instruksi "
+                                        "pengerjaan lembar.",
+                                        "danger",
+                                    )
                             for failure in failures[:6]:
                                 flash(failure, "danger")
                             if len(failures) > 6:
