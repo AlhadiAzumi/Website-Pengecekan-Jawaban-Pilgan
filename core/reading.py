@@ -308,7 +308,7 @@ def _render_mark_mask(size, shape, cx, cy, radius, dx=0, dy=0):
     return mask
 
 
-def _mark_shape_at(binary, reference_binary, x, y, radius):
+def _mark_shape_at(binary, reference_binary, x, y, radius, ink_ratio=None):
     """Kenali bentuk coretan dengan mencocokkan tinta tambahan ke pola ideal.
 
     Tinta cetak (cincin bulatan atau huruf opsi) dibuang lebih dulu memakai
@@ -340,9 +340,13 @@ def _mark_shape_at(binary, reference_binary, x, y, radius):
     angles = (np.arctan2(yy - cy, xx - cx) + 2.0 * math.pi) % (2.0 * math.pi)
     sectors = np.floor((angles + math.pi / 8.0) / (math.pi / 4.0)).astype(int) % 8
     core = distance <= 0.45 * radius
-    core_ratio = float(
-        np.count_nonzero(extra[core])
-    ) / float(max(1, int(np.count_nonzero(core))))
+    core_area = max(1, int(np.count_nonzero(core)))
+    core_ratio = float(np.count_nonzero(extra[core])) / core_area
+    # Templat cetak memuat huruf opsi di tengah bulatan. Pengurangan templat
+    # ikut menghilangkan tengah tanda yang benar-benar dihitamkan, sehingga
+    # ``extra`` tampak seperti cincin. Untuk membedakannya dari lingkaran,
+    # kepenuhan tengah diukur langsung pada citra scan.
+    raw_core = float(np.count_nonzero(roi[core])) / core_area
     band = (
         (distance >= 0.50 * radius)
         & (distance <= 1.30 * radius)
@@ -351,6 +355,12 @@ def _mark_shape_at(binary, reference_binary, x, y, radius):
     diagonal_ratio = float(
         np.count_nonzero(band & np.isin(sectors, (1, 3, 5, 7)))
     ) / float(max(1, int(np.count_nonzero(band))))
+    # Citra hasil scan membuat tengah bulatan hitam tampak lebih terang daripada
+    # simulasi, jadi ambang kepenuhan tengah sengaja direndahkan. Rasio tinta
+    # total dipakai untuk memisahkan lingkaran tipis dari bulatan yang benar
+    # benar dihitamkan pada hasil pemindaian.
+    heavy_ink = ink_ratio is None or ink_ratio >= 0.60
+    filled_center = raw_core >= 0.30 and diagonal_ratio < 0.75 and heavy_ink
 
     local_x, local_y = cx - x0, cy - y0
     dist_to_extra = cv2.distanceTransform(
@@ -394,7 +404,31 @@ def _mark_shape_at(binary, reference_binary, x, y, radius):
         ]
         if fallback:
             best = min(fallback, key=lambda shape: scores[shape])
-    if best == "hitam":
+    # Pola setengah isi hampir selalu bersaing ketat dengan bulatan penuh pada
+    # jarak chamfer. Bulatan hitam asli jauh lebih cocok ke pola hitam.
+    if (
+        filled_center
+        and best in ("hitam", "lingkar")
+        and scores["setengah"] <= scores["hitam"] + 0.25
+    ):
+        return "lain"
+    force_filled = False
+    if (
+        best == "silang"
+        and ink_ratio is not None
+        and ink_ratio >= 0.80
+        and raw_core >= 0.60
+    ):
+        # Tanda hitam penuh pada hasil scan sering menyisakan dua pita tinta
+        # diagonal setelah tinta cetak dibuang, sehingga mirip X. Tanda X
+        # sintetis tidak pernah mencapai rasio tinta ini.
+        best = "hitam"
+        force_filled = True
+    if best == "lingkar" and filled_center:
+        # Chamfer melihat sisa tinta setelah templat dibuang, sehingga bulatan
+        # hitam yang tengahnya tertutup huruf cetak tampak seperti cincin.
+        best = "hitam"
+    if best == "hitam" and not filled_center and not force_filled:
         # Bagian tengah bulatan hitam penuh tinta. Lingkaran hanya mengisi
         # cincin luar, sedangkan tanda setengah isi hanya menutup separuh.
         if core_ratio < 0.30:
@@ -430,6 +464,7 @@ def classify_mark_shapes(
             item["x"],
             item["y"],
             item["radius"],
+            ink_ratio=float(item.get("ratio", 0.0)),
         )
         item["mark_shape"] = shape
         item["shape_ok"] = shape in accepted
@@ -441,8 +476,9 @@ def decide_answers(measurements, fill_ratio=0.40, mark_style="semua"):
 
     Opsi yang dicoret tidak dihitung. Pada mode instruksi khusus, tanda yang
     bentuknya tidak sesuai (misal lingkaran saat mode hanya silang) juga tidak
-    dihitung dan soalnya diberi status salah. Jawaban ganda sejati tetap
-    diberi status ``ganda`` dan dianggap belum dijawab saat penilaian.
+    dihitung dan soalnya diberi status salah. Jawaban ganda tetap diberi status
+    ``ganda``; penilaian akhir dapat menerimanya bila kunci termasuk tanda
+    dengan tinta terkuat.
     """
     strict = str(mark_style or "semua") in SHAPE_ACCEPT
     grouped = {}
@@ -548,8 +584,13 @@ def decide_answers(measurements, fill_ratio=0.40, mark_style="semua"):
     return decisions
 
 
-def score_decisions(decisions, key_map, n_questions):
-    """Bandingkan jawaban siswa dengan kunci dan hitung rekap nilai."""
+def score_decisions(decisions, key_map, n_questions, mark_style="semua"):
+    """Bandingkan jawaban siswa dengan kunci dan hitung rekap nilai.
+
+    Pada mode ``bulat_hitam``, jawaban ganda tetap dihitung ganda kecuali kunci
+    berada di antara tanda dengan tinta terkuat. Ini mencegah coretan tambahan
+    yang jelas lebih lemah menggagalkan jawaban yang sebenarnya sudah tepat.
+    """
     details = []
     correct = wrong = empty = double = 0
     for question_no in range(1, n_questions + 1):
@@ -567,12 +608,38 @@ def score_decisions(decisions, key_map, n_questions):
             }
         student_answer = decision["student_answer"]
         canceled_labels = decision.get("canceled_labels", [])
+        shape_note = decision.get("shape_note", "")
         if decision["status"] == "kosong":
             status = "kosong"
             empty += 1
         elif decision["status"] == "ganda":
-            status = "ganda"
-            double += 1
+            labels = set(student_answer)
+            candidates = [
+                item
+                for item in decision.get("ratios", [])
+                if item["option_label"] in labels and not item.get("canceled")
+            ]
+            key_ratios = [
+                float(item["ratio"])
+                for item in candidates
+                if item["option_label"] == key_answer
+            ]
+            best_ratio = max(
+                (float(item["ratio"]) for item in candidates), default=0.0
+            )
+            if (
+                str(mark_style) == "bulat_hitam"
+                and key_ratios
+                and max(key_ratios) >= best_ratio - 0.05
+            ):
+                status = "benar"
+                correct += 1
+                shape_note = (
+                    shape_note + "; " if shape_note else ""
+                ) + "Jawaban ganda dengan kunci terkuat dinilai benar."
+            else:
+                status = "ganda"
+                double += 1
         elif decision["status"] == "salah":
             status = "salah"
             wrong += 1
@@ -590,7 +657,7 @@ def score_decisions(decisions, key_map, n_questions):
                 "status": status,
                 "ratio": float(decision.get("top_ratio", 0.0)),
                 "canceled_labels": canceled_labels,
-                "shape_note": decision.get("shape_note", ""),
+                "shape_note": shape_note,
                 "all_ratios": [
                     {
                         "label": item["option_label"],
@@ -902,7 +969,9 @@ def process_aligned_sheet(
     invalid_shape_count = sum(
         1 for decision in decisions.values() if decision.get("shape_note")
     )
-    scored = score_decisions(decisions, key_map, n_questions)
+    scored = score_decisions(
+        decisions, key_map, n_questions, params.get("mark_style", "semua")
+    )
     annotated = annotate_sheet(
         aligned,
         measurements,
