@@ -212,14 +212,27 @@ def main():
         "Tanda lingkaran belum terbaca; turunkan fill_ratio pada pengaturan."
     )
 
-    print("[5] Menguji instruksi hanya silang (X)...")
+    print("[5] Menguji semua instruksi cara menjawab...")
     shape_key_map = {number: "B" for number in range(1, n_questions + 1)}
-    shape_params = dict(params, fill_ratio=0.20, mark_style="silang")
-    for style, expected_correct in (
-        ("silang", n_questions),
-        ("lingkar", 0),
-        ("arsir", 0),
-    ):
+    shape_cases = (
+        (
+            "silang",
+            (("semua", n_questions), ("silang", n_questions), ("bulat", 0), ("bulat_hitam", 0)),
+        ),
+        (
+            "lingkar",
+            (("semua", n_questions), ("silang", 0), ("bulat", n_questions), ("bulat_hitam", 0)),
+        ),
+        (
+            "arsir",
+            (("semua", n_questions), ("silang", 0), ("bulat", 0), ("bulat_hitam", n_questions)),
+        ),
+        (
+            "setengah",
+            (("semua", n_questions), ("silang", 0), ("bulat", 0), ("bulat_hitam", 0)),
+        ),
+    )
+    for style, expectations in shape_cases:
         shape_sheet = reference.copy()
         for question_no in range(1, n_questions + 1):
             bubble = next(
@@ -235,27 +248,34 @@ def main():
                 bubble["radius"],
                 style,
             )
-        shape_result = process_aligned_sheet(
-            shape_sheet,
-            bubbles,
-            shape_key_map,
-            n_questions,
-            shape_params,
-            reference=reference,
+        scan = make_perspective_scan(shape_sheet, rng, 3)
+        aligned, _, _, _ = align_to_template(
+            scan, reference, info["markers"], mode="auto"
         )
-        print(
-            f"    {style} pada mode silang: benar={shape_result['correct']} "
-            f"(harus {expected_correct}), "
-            f"ditolak={shape_result['invalid_shape_count']}"
-        )
-        assert shape_result["correct"] == expected_correct
-        if expected_correct == n_questions:
-            assert shape_result["invalid_shape_count"] == 0
-        else:
-            assert shape_result["invalid_shape_count"] == n_questions
-            assert all(
-                detail.get("shape_note") for detail in shape_result["details"]
+        summary = []
+        for mode, expected_correct in expectations:
+            shape_params = dict(params, fill_ratio=0.20, mark_style=mode)
+            shape_result = process_aligned_sheet(
+                aligned,
+                bubbles,
+                shape_key_map,
+                n_questions,
+                shape_params,
+                reference=reference,
             )
+            summary.append(f"{mode}={shape_result['correct']}/{n_questions}")
+            assert shape_result["correct"] == expected_correct, (
+                f"Tanda {style} pada mode {mode}: "
+                f"dapat {shape_result['correct']}, harus {expected_correct}"
+            )
+            if mode == "semua" or expected_correct == n_questions:
+                assert shape_result["invalid_shape_count"] == 0
+            else:
+                assert shape_result["invalid_shape_count"] == n_questions
+                assert all(
+                    detail.get("shape_note") for detail in shape_result["details"]
+                )
+        print(f"    {style}: " + " ".join(summary))
 
     print("[6] Menguji threshold adaptif dan deteksi templat dengan noise...")
     noisy = reference.copy()

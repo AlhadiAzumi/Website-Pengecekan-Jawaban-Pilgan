@@ -271,9 +271,9 @@ def measure_bubbles(binary, bubbles, inner_scale=1.0):
 # Gaya tanda yang diterima pada tiap mode instruksi. Mode "semua" sengaja
 # tidak masuk daftar: semua bentuk tanda tetap diterima seperti sebelumnya.
 SHAPE_ACCEPT = {
-    # Hanya mode silang yang divalidasi bentuknya. Mode lain memakai ambang
-    # rasio tinta seperti sebelum fitur tenant diperkenalkan.
     "silang": {"silang"},
+    "bulat": {"lingkar"},
+    "bulat_hitam": {"hitam"},
 }
 SHAPE_LABEL = {
     "silang": "silang (X)",
@@ -289,17 +289,36 @@ def _accepted_shape_label(mark_style):
     return SHAPE_LABEL.get(first, str(mark_style or ""))
 
 
-def _mark_shape_at(binary, reference_binary, x, y, radius):
-    """Kenali bentuk coretan dengan membandingkan scan dan templat kosong.
+def _render_mark_mask(size, shape, cx, cy, radius, dx=0, dy=0):
+    """Buat pola ideal X, lingkaran, bulatan hitam, atau setengah lingkaran."""
+    mask = np.zeros(size, np.uint8)
+    cx, cy = int(round(cx + dx)), int(round(cy + dy))
+    thickness = max(2, int(round(radius * 0.20)))
+    ring_radius = max(4, int(round(radius * 0.82)))
+    if shape == "silang":
+        span = max(4, int(round(radius * 0.70)))
+        cv2.line(mask, (cx - span, cy - span), (cx + span, cy + span), 255, thickness, cv2.LINE_AA)
+        cv2.line(mask, (cx - span, cy + span), (cx + span, cy - span), 255, thickness, cv2.LINE_AA)
+    elif shape == "lingkar":
+        cv2.circle(mask, (cx, cy), ring_radius, 255, thickness, cv2.LINE_AA)
+    elif shape == "hitam":
+        cv2.circle(mask, (cx, cy), ring_radius, 255, -1, cv2.LINE_AA)
+    elif shape == "setengah":
+        cv2.ellipse(mask, (cx, cy), (ring_radius, ring_radius), 0, 0, 180, 255, -1, cv2.LINE_AA)
+    return mask
 
-    Tinta cetak (cincin bulatan atau huruf opsi) dibuang lebih dulu. Sisa tinta
-    dianalisis di bagian tengah sel dan pada cincin di sekitarnya. Silang (X)
-    memusat pada empat sektor diagonal, sedangkan lingkaran merata ke seluruh
-    arah dan bulatan hitam juga memenuhi bagian tengah sel.
+
+def _mark_shape_at(binary, reference_binary, x, y, radius):
+    """Kenali bentuk coretan dengan mencocokkan tinta tambahan ke pola ideal.
+
+    Tinta cetak (cincin bulatan atau huruf opsi) dibuang lebih dulu memakai
+    templat kosong. Tinta sisanya dibandingkan dengan pola X, lingkaran, dan
+    bulatan hitam memakai jarak chamfer dua arah, sehingga ketebalan pensil dan
+    sedikit pergeseran hasil penyelarasan tidak terlalu berpengaruh.
     """
     radius = max(4.0, float(radius))
     cx, cy = float(x), float(y)
-    half = int(np.ceil(1.6 * radius)) + 2
+    half = int(np.ceil(1.7 * radius)) + 4
     height, width = binary.shape[:2]
     x0, x1 = max(0, int(cx) - half), min(width, int(cx) + half + 1)
     y0, y1 = max(0, int(cy) - half), min(height, int(cy) + half + 1)
@@ -307,46 +326,87 @@ def _mark_shape_at(binary, reference_binary, x, y, radius):
         return "lain"
 
     roi = binary[y0:y1, x0:x1]
-    reference = reference_binary[y0:y1, x0:x1]
-    # Dilation 3x3 cukup untuk menyisihkan goresan cetak tanpa ikut
-    # menghapus coretan pensil yang tipis.
     reference = cv2.dilate(
-        reference,
+        reference_binary[y0:y1, x0:x1],
         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
         iterations=1,
     )
     extra = cv2.bitwise_and(roi, cv2.bitwise_not(reference))
+    if int(np.count_nonzero(extra)) < 8:
+        return "lain"
 
     yy, xx = np.mgrid[y0:y1, x0:x1]
     distance = np.hypot(xx - cx, yy - cy)
-    core = distance <= 0.40 * radius
-    ring = (distance >= 0.55 * radius) & (distance <= 1.30 * radius)
-    whole = distance <= 1.35 * radius
-    core_area = max(1, int(core.sum()))
-    core_ratio = np.count_nonzero(extra[core]) / float(core_area)
-    ring_ink = int(np.count_nonzero(extra[ring]))
-    total_ink = int(np.count_nonzero(extra[whole]))
-    if total_ink < max(8, int(0.01 * np.count_nonzero(whole))):
-        return "lain"
-
     angles = (np.arctan2(yy - cy, xx - cx) + 2.0 * math.pi) % (2.0 * math.pi)
     sectors = np.floor((angles + math.pi / 8.0) / (math.pi / 4.0)).astype(int) % 8
-    sector_ink = [int(np.count_nonzero(extra[ring & (sectors == index)])) for index in range(8)]
-    threshold = max(2, int(0.25 * max(sector_ink)))
-    occupied = sum(1 for value in sector_ink if value >= threshold)
-    diagonal_ink = sum(sector_ink[index] for index in (1, 3, 5, 7))
-    diagonal_ratio = diagonal_ink / float(max(1, ring_ink))
+    core = distance <= 0.45 * radius
+    core_ratio = float(
+        np.count_nonzero(extra[core])
+    ) / float(max(1, int(np.count_nonzero(core))))
+    band = (
+        (distance >= 0.50 * radius)
+        & (distance <= 1.30 * radius)
+        & (extra > 0)
+    )
+    diagonal_ratio = float(
+        np.count_nonzero(band & np.isin(sectors, (1, 3, 5, 7)))
+    ) / float(max(1, int(np.count_nonzero(band))))
 
-    if core_ratio >= 0.50 and occupied >= 6:
-        return "hitam"
-    if occupied >= 6 and diagonal_ratio < 0.72:
-        return "lingkar"
-    if occupied <= 6 and diagonal_ratio >= 0.72:
-        return "silang"
-    return "lain"
+    local_x, local_y = cx - x0, cy - y0
+    dist_to_extra = cv2.distanceTransform(
+        cv2.bitwise_not(extra), cv2.DIST_L2, 3
+    )
+    extra_pixels = extra > 0
+    scores = {}
+    shift = max(1, int(round(radius * 0.16)))
+    for shape in ("silang", "lingkar", "hitam", "setengah"):
+        best = float("inf")
+        for dx in range(-shift, shift + 1):
+            for dy in range(-shift, shift + 1):
+                ideal = _render_mark_mask(
+                    roi.shape, shape, local_x, local_y, radius, dx, dy
+                )
+                ideal = cv2.bitwise_and(ideal, cv2.bitwise_not(reference))
+                ideal_pixels = ideal > 0
+                if int(np.count_nonzero(ideal_pixels)) < 4:
+                    continue
+                dist_to_ideal = cv2.distanceTransform(
+                    cv2.bitwise_not(ideal), cv2.DIST_L2, 3
+                )
+                score = float(
+                    np.asarray(dist_to_ideal[extra_pixels], dtype=np.float64).mean()
+                    + np.asarray(dist_to_extra[ideal_pixels], dtype=np.float64).mean()
+                )
+                best = min(best, score)
+        scores[shape] = best
+
+    # Setengah lingkaran bukan instruksi yang didukung, tapi dipakai sebagai
+    # pembanding agar tanda setengah isi tidak ikut diterima sebagai bulat.
+    best = min(scores, key=scores.get)
+    if best == "setengah":
+        return "lain"
+    if best == "silang" and diagonal_ratio < 0.55:
+        # Lingkaran yang sedikit miring kadang lebih mirip X pada jarak chamfer.
+        # Batang X selalu punya tinta pada sektor diagonal; jika tidak ada,
+        # pilih pola lingkaran/hitam terbaik berikutnya.
+        fallback = [
+            shape for shape in ("lingkar", "hitam") if scores[shape] < float("inf")
+        ]
+        if fallback:
+            best = min(fallback, key=lambda shape: scores[shape])
+    if best == "hitam":
+        # Bagian tengah bulatan hitam penuh tinta. Lingkaran hanya mengisi
+        # cincin luar, sedangkan tanda setengah isi hanya menutup separuh.
+        if core_ratio < 0.30:
+            best = "lingkar"
+        elif core_ratio < 0.48:
+            best = "lain"
+    return best
 
 
-def classify_mark_shapes(binary, reference_binary, measurements, mark_style="semua"):
+def classify_mark_shapes(
+    binary, reference_binary, measurements, mark_style="semua", fill_ratio=0.0
+):
     """Isi ``mark_shape`` dan ``shape_ok`` pada tiap hasil pengukuran."""
     accepted = SHAPE_ACCEPT.get(str(mark_style or "semua"))
     if not accepted or reference_binary is None:
@@ -360,6 +420,10 @@ def classify_mark_shapes(binary, reference_binary, measurements, mark_style="sem
             reference_binary, (binary.shape[1], binary.shape[0])
         )
     for item in measurements:
+        if fill_ratio and float(item.get("ratio", 0.0)) < fill_ratio:
+            item["mark_shape"] = None
+            item["shape_ok"] = True
+            continue
         shape = _mark_shape_at(
             binary,
             reference_binary,
@@ -778,13 +842,12 @@ def process_aligned_sheet(
             require_two_bands=params.get("cell_mode", "bubble") == "letter",
         )
     mark_style = str(params.get("mark_style", "semua") or "semua")
+    fill_ratio = float(params.get("fill_ratio", 0.40))
     if mark_style in SHAPE_ACCEPT:
         classify_mark_shapes(
-            binary, reference_binary, measurements, mark_style
+            binary, reference_binary, measurements, mark_style, fill_ratio
         )
-    decisions = decide_answers(
-        measurements, float(params.get("fill_ratio", 0.40)), mark_style
-    )
+    decisions = decide_answers(measurements, fill_ratio, mark_style)
     invalid_shape_count = sum(
         1 for decision in decisions.values() if decision.get("shape_note")
     )
